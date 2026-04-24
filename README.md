@@ -1,209 +1,340 @@
-# 🚦 ImpulseLock – Rule-Based Spending Control System (Phase 1)
+# 🚀 ImpulseLock
 
-ImpulseLock is a Java-based backend system designed to **detect and control impulsive spending behavior** in real time using a **rule-based decision engine**.
-
-Instead of focusing on fraud, ImpulseLock focuses on **user-side financial discipline**, applying configurable rules to decide whether a transaction should be **allowed, delayed, or blocked**.
-
-This repository currently contains **Phase 1** of the project, which focuses on **problem definition and object-oriented system design**.
+### AI-Inspired Rule-Based Transaction Risk Evaluation System
 
 ---
 
-## 🧠 Problem Statement
+## 📌 Overview
 
-Many users lose money due to impulsive or poorly-timed spending (late-night purchases, exceeding daily limits, etc.).  
-Most financial apps only provide **post-spending reports**, not **real-time prevention**.
+**ImpulseLock** is a full-stack application designed to prevent impulsive or risky financial transactions.
+It evaluates transactions in real-time using a **rule-based decision engine** combined with **user-defined behavioral preferences**.
 
-ImpulseLock aims to:
-- Analyze a transaction at execution time
-- Apply behavioral spending rules
-- Generate an explainable decision:
-  - **ALLOW**
-  - **DELAY**
-  - **BLOCK**
+The system analyzes each transaction and returns a decision:
+
+* ✅ **ALLOW** → Safe transaction
+* ⚠️ **DELAY** → Risky, reconsider
+* ❌ **BLOCK** → Dangerous, restrict
 
 ---
 
-## 📌 Phase 1 Scope (Current)
+## 🎯 Key Features
 
-Phase 1 focuses strictly on **core OOP design**, as per academic rubrics.
+### 🧠 Intelligent Decision Engine
 
-### ✅ Included
-- Domain models (`Transaction`, `UserProfile`, `Decision`)
-- Rule Engine using **Strategy Pattern**
-- Multiple spending rules
-- Decision Engine with risk scoring
-- Console-based simulation for demonstration
+* Modular rule-based system
+* Extensible architecture (Strategy Pattern)
+* Dynamic risk scoring
 
-### ❌ Not Included (Planned for Phase 2)
-- Database (JDBC / JPA)
-- File handling
-- REST APIs
-- Authentication
-- Frontend / UI
+### 👤 User Preference Configuration
+
+* Daily spending limit
+* Night spending restriction
+* Sensitivity level
+* Restricted categories
+
+### 💳 Transaction Evaluation
+
+* Real-time API evaluation
+* Risk scoring + explanation
+* Persistent transaction storage
+
+### 🌐 Full-Stack System
+
+* Backend: Spring Boot (Java)
+* Frontend: React.js
+* Database: MySQL
 
 ---
 
-## 🧱 System Design Overview (Phase 1)
-
-```text
-Transaction + UserProfile
-↓
-SpendingRule (interface)
-↓
-Concrete Rule Implementations
-↓
-DecisionEngine
-↓
-Decision (ALLOW / DELAY / BLOCK)
+## 🏗️ Project Architecture
 
 ```
-
-This design demonstrates:
-
-* Abstraction via interfaces
-* Polymorphism via multiple rule implementations
-* Clean separation of concerns
-* Industry-standard **Strategy Pattern**
-
----
-
-## 🛠️ Tech Stack (Phase 1)
-
-* **Java 17**
-* **Spring Boot 4**
-* **Maven**
-* Console-based execution (no DB, no APIs yet)
-
----
-
-## 📁 Project Structure
-
-```text
-src/main/java/com/impulselock/impulselock
+ImpulseLock/
+├── src/main/java/com/impulselock/impulselock/
+│   ├── controller/     # REST APIs
+│   ├── service/        # Business logic
+│   ├── engine/         # Decision Engine
+│   ├── rules/          # Rule implementations
+│   ├── repository/     # JDBC database layer
+│   ├── model/          # Core data models
+│   ├── config/         # Bean & CORS configuration
+│   ├── exception/      # Error handling
+│   └── dto/            # Request/response objects
 │
-├── engine        → Decision logic
-├── model         → Domain models
-├── rules         → Spending rules (Strategy Pattern)
-└── ImpulseLockApplication.java
-
+├── frontend/           # React UI
+│
+├── pom.xml             # Maven config
+└── README.md
 ```
 
 ---
 
-## 🚀 How to Run the Project
+## ⚙️ How It Works
 
-### 1️⃣ Prerequisites
+### 🔄 Flow
 
-Make sure you have:
+1. User sets preferences
+2. User initiates transaction
+3. Backend fetches user profile
+4. DecisionEngine evaluates rules
+5. Risk score is calculated
+6. Decision is returned
 
-* Java **17 or higher**
-* Maven installed
-* Git installed
+---
 
-Check versions:
+## 🧠 Decision Logic
+
+The system evaluates transactions using multiple rules:
+
+* 💰 **HighAmountRule** → Checks daily limit
+* 🌙 **NightSpendingRule** → Restricts night usage
+* ⚡ **FrequentTransactionRule** → Detects rapid activity
+* 🛑 **CategoryRestrictionRule** → Blocks restricted categories
+* 🎚️ **SensitivityLevelRule** → Adjusts strictness
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer       | Technology        |
+| ----------- | ----------------- |
+| Backend     | Java, Spring Boot |
+| Frontend    | React.js          |
+| Database    | MySQL             |
+| Build Tool  | Maven             |
+| API Testing | Postman           |
+
+---
+
+## 🧪 API Endpoints
+
+### 🔹 Evaluate Transaction
+
+```
+POST /transaction/evaluate
+```
+
+#### Request:
+
+```json
+{
+  "userId": "U101",
+  "amount": 1000,
+  "category": "shopping",
+  "merchant": "Amazon"
+}
+```
+
+#### Response:
+
+```json
+{
+  "decisionType": "BLOCK",
+  "riskScore": 120.0,
+  "explanation": "Transaction exceeds daily limit..."
+}
+```
+
+---
+
+### 🔹 Create User (Preferences)
+
+```
+POST /users
+```
+
+#### Request:
+
+```json
+{
+  "userId": "U101",
+  "dailyLimit": 3000,
+  "nightSpendingAllowed": false,
+  "sensitivityLevel": 5
+}
+```
+
+---
+
+## 💻 How to Run Locally
+
+---
+
+### 🔹 1. Clone Repository
 
 ```bash
-java -version
-mvn -version
-git --version
-
+git clone https://github.com/<your-username>/ImpulseLock.git
+cd ImpulseLock
 ```
 
 ---
 
-### 2️⃣ Clone the Repository
+### 🔹 2. Setup MySQL Database
 
-```bash
-git clone https://github.com/shourya-tiwari/ImpulseLock.git
-cd impulselock
+Create database:
 
+```sql
+CREATE DATABASE impulselock;
+USE impulselock;
+```
+
+Create tables:
+
+```sql
+CREATE TABLE users (
+    user_id VARCHAR(50) PRIMARY KEY,
+    daily_limit DOUBLE,
+    night_spending_allowed BOOLEAN,
+    sensitivity_level INT
+);
+
+CREATE TABLE transactions (
+    transaction_id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50),
+    amount DOUBLE,
+    category VARCHAR(50),
+    merchant VARCHAR(100),
+    timestamp DATETIME
+);
 ```
 
 ---
 
-### 3️⃣ Build the Project
+### 🔹 3. Configure Backend
 
-```bash
-mvn clean compile
+Edit:
 
 ```
+src/main/resources/application.properties
+```
 
-You should see:
-
-```text
-BUILD SUCCESS
-
+```properties
+spring.datasource.url=jdbc:mysql://localhost:3306/impulselock
+spring.datasource.username=root
+spring.datasource.password=your_password
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
 ```
 
 ---
 
-### 4️⃣ Run the Application
+### 🔹 4. Run Backend
 
 ```bash
 mvn spring-boot:run
-
 ```
 
-On successful startup, you will see:
-
-```text
-Started ImpulseLockApplication
+Server runs at:
 
 ```
-
-Followed by console output similar to:
-
-```text
-Decision: DELAY
-Risk Score: 70.0
-Reason: Transaction amount exceeds daily spending limit;
-
+http://localhost:8080
 ```
 
-This output demonstrates the **rule engine and decision logic working correctly**.
+---
+
+### 🔹 5. Run Frontend
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+Frontend runs at:
+
+```
+http://localhost:3000
+```
 
 ---
 
-## 🧪 Example Scenario (Phase 1 Demo)
+### 🔹 6. Test Application
 
-* User daily limit: ₹2000
-* Transaction amount: ₹3500
-* Night spending: not allowed
-
-**Result:**
-
-* Rule triggered: `HighAmountRule`
-* Risk Score: `70`
-* Decision: **DELAY**
+1. Open frontend
+2. Create user preferences
+3. Evaluate transactions
+4. View decision + risk
 
 ---
 
-## 🎯 Academic Relevance
+## 🎨 UI Features
 
-This phase satisfies:
+* Dark modern fintech UI
+* Real-time evaluation
+* Color-coded decisions
 
-* **Problem Definition**
-* **Object-Oriented Design**
-* **Use of Design Patterns**
-* **Clean modular architecture**
-
-Phase 2 will extend this system with persistence, APIs, and real-world integrations.
-
----
-
-## 🔮 Future Enhancements (Phase 2+)
-
-* Database integration (JDBC / JPA)
-* File-based transaction ingestion
-* REST APIs for transaction evaluation
-* User-configurable rules
-* Dashboard / frontend integration
+  * 🟢 ALLOW
+  * 🟡 DELAY
+  * 🔴 BLOCK
 
 ---
 
-## 📌 Status
+## ⚠️ Common Issues & Fixes
 
-✔ Phase 1 completed
+### ❌ "Failed to fetch"
 
-⏳ Phase 2 planned
+✔ Ensure backend is running
+✔ Check correct API URL
+✔ Add CORS configuration
 
+---
+
+### ❌ DB connection error
+
+✔ Check MySQL running
+✔ Verify username/password
+
+---
+
+### ❌ Port issues
+
+✔ Backend → 8080
+✔ Frontend → 3000
+
+---
+
+## 🔮 Future Enhancements
+
+* 🤖 Machine Learning-based risk prediction
+* 📊 Analytics dashboard
+* 📱 Mobile app integration
+* 🔐 Authentication & user accounts
+
+---
+
+## 👥 Team Contribution
+
+| Member   | Contribution                       |
+| -------- | ---------------------------------- |
+| Shourya      | Decision Engine, Service, Frontend |
+| Adhya | Controller & API                   |
+| Aditi | Database & Repository              |
+| Rishik | Config & Exception Handling        |
+
+---
+
+## 📈 Project Highlights
+
+* Layered architecture
+* Clean separation of concerns
+* Extensible rule engine
+* Full-stack integration
+
+---
+
+## 🧠 Key Learning Outcomes
+
+* Spring Boot architecture
+* REST API design
+* JDBC integration
+* React frontend development
+* Git version control
+
+---
+
+## 📌 Conclusion
+
+ImpulseLock demonstrates how **rule-based intelligence** can be used to simulate financial decision-making and prevent impulsive behavior in real-world systems.
+
+---
+
+## ⭐ If you like this project, give it a star!
