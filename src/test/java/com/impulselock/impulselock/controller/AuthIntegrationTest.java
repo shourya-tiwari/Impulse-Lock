@@ -115,8 +115,15 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     @Test
     void protectedEndpointWithTamperedTokenReturns401() throws Exception {
         String accessToken = registerAndExtract("frank", "frank@example.com", "password123").accessToken();
-        String tampered = accessToken.substring(0, accessToken.length() - 1)
-                + (accessToken.endsWith("a") ? "b" : "a");
+        // Tamper a character in the middle of the signature segment, not the very last character:
+        // base64url's final character in an encoding group can have fewer than 6 significant bits,
+        // so some substitutions right at the end decode to the exact same byte value and leave the
+        // signature - and therefore validity - unchanged, making the test flaky.
+        int tamperIndex = accessToken.length() / 2;
+        char original = accessToken.charAt(tamperIndex);
+        String tampered = accessToken.substring(0, tamperIndex)
+                + (original == 'a' ? 'b' : 'a')
+                + accessToken.substring(tamperIndex + 1);
 
         mockMvc.perform(put("/api/v2/users/me/preferences")
                         .header("Authorization", "Bearer " + tampered)

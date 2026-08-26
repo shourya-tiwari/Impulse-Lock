@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.impulselock.impulselock.entity.Transaction;
 import com.impulselock.impulselock.entity.User;
+import com.impulselock.impulselock.model.DecisionType;
 import com.impulselock.impulselock.support.AbstractIntegrationTest;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -88,6 +89,10 @@ class TransactionRepositoryTest extends AbstractIntegrationTest {
         transaction.setCategory(category);
         transaction.setMerchant("TestMerchant");
         transaction.setOccurredAt(occurredAt);
+        transaction.setDecisionType(DecisionType.ALLOW);
+        transaction.setRiskScore(BigDecimal.ZERO);
+        transaction.setExplanation("");
+        transaction.setTriggeredRules(List.of());
         return transaction;
     }
 }

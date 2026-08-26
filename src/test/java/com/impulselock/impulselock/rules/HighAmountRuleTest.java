@@ -36,7 +36,9 @@ class HighAmountRuleTest {
     @Test
     void aggregatesTodaysEarlierTransactionsTowardTheLimit() {
         User user = userWithDailyLimit(1000);
-        LocalDateTime now = LocalDateTime.now();
+        // Anchored to noon today (not LocalDateTime.now()) so minusHours(2) can never cross
+        // midnight into the previous calendar day depending on what time the suite happens to run.
+        LocalDateTime now = LocalDateTime.now().toLocalDate().atTime(12, 0);
         Transaction earlierToday = transactionWithAmount(600, now.minusHours(2));
         Transaction current = transactionWithAmount(500, now);
 
@@ -49,7 +51,9 @@ class HighAmountRuleTest {
     @Test
     void ignoresYesterdaysTransactionsWhenComputingTodaysTotal() {
         User user = userWithDailyLimit(1000);
-        LocalDateTime now = LocalDateTime.now();
+        // Anchored to noon today (not LocalDateTime.now()) so minusHours(2) can never cross
+        // midnight into the previous calendar day depending on what time the suite happens to run.
+        LocalDateTime now = LocalDateTime.now().toLocalDate().atTime(12, 0);
         Transaction yesterday = transactionWithAmount(900, now.minusDays(1));
         Transaction current = transactionWithAmount(500, now);
 

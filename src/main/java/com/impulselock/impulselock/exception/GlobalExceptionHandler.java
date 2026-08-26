@@ -19,6 +19,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -136,6 +137,17 @@ public class GlobalExceptionHandler {
                 .map(violation -> new FieldErrorDto(violation.getPropertyPath().toString(), violation.getMessage()))
                 .collect(Collectors.toList());
         return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), fieldErrors);
+    }
+
+    /**
+     * Thrown by Spring MVC itself for a URL that matches no controller mapping and no static
+     * resource - without this, it fell through to the generic 500 handler below, turning a
+     * simple "no such endpoint" into a spurious "Unexpected server error" instead of a 404.
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(NoResourceFoundException exception,
+                                                                 HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.NOT_FOUND, "No such endpoint", request.getRequestURI());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -100,13 +100,20 @@ class AdminControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void adminAuditLogsEndpointIsReachableAndEmptyBeforePhase4() throws Exception {
+    void adminAuditLogsEndpointIsReachable() throws Exception {
         String adminToken = registerUser("erin");
         MockMvcAuthHelper.promoteToAdmin(userRepository, roleRepository, "erin");
 
+        // Not asserting a specific totalElements value: audit writes commit via their own
+        // REQUIRES_NEW transaction (see AuditLogService / docs/v2/architecture.md#audit-logging),
+        // so how many rows are visible here depends on what else committed - and is visible under
+        // this transaction's snapshot - before this test's own transaction started, which this
+        // test has no control over. Just proves an admin can reach the endpoint and gets back the
+        // paginated envelope shape.
         mockMvc.perform(get("/api/v2/admin/audit-logs").header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElements").value(0));
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").exists());
     }
 
     private String registerUser(String username) throws Exception {

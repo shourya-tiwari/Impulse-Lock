@@ -70,7 +70,11 @@ public class LoginRateLimiter {
         private final AtomicInteger count = new AtomicInteger(1);
 
         boolean isExpired(Duration window) {
-            return Instant.now().isAfter(windowStart.plus(window));
+            // !isBefore (i.e. "at or after"), not isAfter: a zero-minute window must count as
+            // expired immediately, but two back-to-back Instant.now() calls can return the exact
+            // same instant on a coarse system clock, which isAfter() (strict >) would treat as
+            // "not yet expired".
+            return !Instant.now().isBefore(windowStart.plus(window));
         }
     }
 }

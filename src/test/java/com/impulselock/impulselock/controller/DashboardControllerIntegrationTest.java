@@ -103,6 +103,12 @@ class DashboardControllerIntegrationTest extends AbstractIntegrationTest {
     }
 
     private void evaluate(String token, double amount, String category) throws Exception {
+        // Fixed daytime *yesterday* (not a hardcoded past date, and not "today") - dashboard/summary
+        // filters occurredAt against an upper bound of the actual current instant, so a "today at
+        // noon" timestamp would be in the future (and so excluded) whenever the suite happens to
+        // run before noon; yesterday-at-noon is guaranteed to be in the past regardless of what
+        // time it is right now, while still avoiding NightSpendingRule's 23:00-06:00 window.
+        LocalDateTime occurredAt = LocalDateTime.now().minusDays(1).toLocalDate().atTime(12, 0);
         mockMvc.perform(post("/api/v2/transactions/evaluate")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -110,7 +116,7 @@ class DashboardControllerIntegrationTest extends AbstractIntegrationTest {
                                 "amount", amount,
                                 "category", category,
                                 "merchant", "Test Merchant",
-                                "occurredAt", LocalDateTime.of(2026, 1, 15, 12, 0, 0).toString()))))
+                                "occurredAt", occurredAt.toString()))))
                 .andExpect(status().isOk());
     }
 }
