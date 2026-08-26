@@ -7,6 +7,7 @@
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **ImpulseLock** is a JWT-authenticated, rule-based transaction risk evaluation system. A Spring
 Boot backend evaluates financial transactions against each user's own behavioral preferences —
@@ -540,7 +541,4 @@ Impulse-Lock/
 
 ## License
 
-No license file is currently included in this repository. Absent one, default copyright applies —
-all rights are reserved, and no permission is granted to reuse, modify, or redistribute this code.
-If you intend to open-source this project, add a `LICENSE` file (e.g. MIT, Apache 2.0) at the repo
-root.
+Licensed under the [MIT License](LICENSE) — see the `LICENSE` file for the full text.
