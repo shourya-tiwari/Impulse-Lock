@@ -1,14 +1,16 @@
 package com.impulselock.impulselock.engine;
 
-import com.impulselock.impulselock.model.*;
+import com.impulselock.impulselock.entity.Transaction;
+import com.impulselock.impulselock.entity.User;
+import com.impulselock.impulselock.model.Decision;
+import com.impulselock.impulselock.model.DecisionType;
 import com.impulselock.impulselock.rules.SpendingRule;
-
 import java.util.List;
 
 public class DecisionEngine {
 
     public Decision evaluate(Transaction transaction,
-                             UserProfile userProfile,
+                             User userProfile,
                              List<SpendingRule> rules) {
 
         double totalRisk = 0;

@@ -1,7 +1,7 @@
 package com.impulselock.impulselock.rules;
 
-import com.impulselock.impulselock.model.Transaction;
-import com.impulselock.impulselock.model.UserProfile;
+import com.impulselock.impulselock.entity.Transaction;
+import com.impulselock.impulselock.entity.User;
 
 public class HighAmountRule extends AbstractSpendingRule {
 
@@ -10,8 +10,8 @@ public class HighAmountRule extends AbstractSpendingRule {
     }
 
     @Override
-    public double evaluate(Transaction transaction, UserProfile userProfile) {
-        if (transaction.getAmount() > userProfile.getDailyLimit()) {
+    public double evaluate(Transaction transaction, User userProfile) {
+        if (transaction.getAmount().compareTo(userProfile.getDailyLimit()) > 0) {
             return getRiskWeight();
         }
         return 0;

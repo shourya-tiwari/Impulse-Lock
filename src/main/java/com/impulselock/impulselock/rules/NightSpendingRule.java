@@ -1,7 +1,7 @@
 package com.impulselock.impulselock.rules;
 
-import com.impulselock.impulselock.model.Transaction;
-import com.impulselock.impulselock.model.UserProfile;
+import com.impulselock.impulselock.entity.Transaction;
+import com.impulselock.impulselock.entity.User;
 
 public class NightSpendingRule extends AbstractSpendingRule {
 
@@ -10,8 +10,8 @@ public class NightSpendingRule extends AbstractSpendingRule {
     }
 
     @Override
-    public double evaluate(Transaction transaction, UserProfile userProfile) {
-        int hour = transaction.getTimestamp().getHour();
+    public double evaluate(Transaction transaction, User userProfile) {
+        int hour = transaction.getOccurredAt().getHour();
 
         if (!userProfile.isNightSpendingAllowed() && (hour < 6 || hour >= 23)) {
             return getRiskWeight();

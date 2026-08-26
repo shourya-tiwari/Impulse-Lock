@@ -1,7 +1,7 @@
 package com.impulselock.impulselock.rules;
 
-import com.impulselock.impulselock.model.Transaction;
-import com.impulselock.impulselock.model.UserProfile;
+import com.impulselock.impulselock.entity.Transaction;
+import com.impulselock.impulselock.entity.User;
 
 public abstract class AbstractSpendingRule implements SpendingRule {
 
@@ -22,5 +22,5 @@ public abstract class AbstractSpendingRule implements SpendingRule {
         return riskWeight;
     }
 
-    public abstract double evaluate(Transaction transaction, UserProfile userProfile);
+    public abstract double evaluate(Transaction transaction, User userProfile);
 }

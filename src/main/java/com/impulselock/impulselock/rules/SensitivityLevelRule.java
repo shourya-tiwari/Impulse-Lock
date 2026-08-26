@@ -1,7 +1,7 @@
 package com.impulselock.impulselock.rules;
 
-import com.impulselock.impulselock.model.Transaction;
-import com.impulselock.impulselock.model.UserProfile;
+import com.impulselock.impulselock.entity.Transaction;
+import com.impulselock.impulselock.entity.User;
 
 public class SensitivityLevelRule extends AbstractSpendingRule {
 
@@ -10,7 +10,7 @@ public class SensitivityLevelRule extends AbstractSpendingRule {
     }
 
     @Override
-    public double evaluate(Transaction transaction, UserProfile userProfile) {
+    public double evaluate(Transaction transaction, User userProfile) {
         if (userProfile.getSensitivityLevel() >= 8) {
             return getRiskWeight();
         }
