@@ -45,6 +45,8 @@ public class SecurityConfig {
                         // OpenApiConfig) - disabled outright in prod instead of gated here,
                         // since the UI's static assets need to load unauthenticated anyway.
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        // Backs the docker-compose healthcheck, which has no JWT to send.
+                        .requestMatchers("/actuator/health").permitAll()
                         .requestMatchers("/api/v2/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
                 .exceptionHandling(exception -> exception

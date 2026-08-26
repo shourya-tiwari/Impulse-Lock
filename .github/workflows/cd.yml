@@ -1,0 +1,62 @@
+name: CD
+
+# Builds and publishes container images after CI has already validated the same commit
+# (see docs/v2/deployment-plan.md#cicd). Runs on pushes to main and on version tags.
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: backend
+            context: .
+            dockerfile: Dockerfile
+          - image: frontend
+            context: ./frontend
+            dockerfile: frontend/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-${{ matrix.image }}
+          tags: |
+            type=sha
+            type=semver,pattern={{version}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # Placeholder - no hosting target has been chosen yet (see docs/v2/deployment-plan.md).
+  # Fill this in once one is: e.g. SSH + `docker compose pull && up -d` on a VM, or a
+  # platform-specific deploy action (ECS, Fly.io, Render, etc).
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: false
+    steps:
+      - run: echo "No deploy target configured yet."
