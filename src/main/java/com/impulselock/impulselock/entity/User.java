@@ -52,7 +52,7 @@ public class User {
     @Column(name = "night_spending_allowed", nullable = false)
     private boolean nightSpendingAllowed;
 
-    @Column(name = "sensitivity_level", nullable = false)
+    @Column(name = "sensitivity_level", nullable = false, columnDefinition = "TINYINT")
     private int sensitivityLevel = 5;
 
     @Column(nullable = false)
