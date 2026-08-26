@@ -54,6 +54,19 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!-- Bean Validation (request DTOs - see docs/v2/security-design.md#validation) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- AOP (the @Auditable audit-logging aspect - see docs/v2/architecture.md#audit-logging).
+             Renamed from spring-boot-starter-aop to spring-boot-starter-aspectj in Spring Boot 4. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aspectj</artifactId>
+        </dependency>
+
         <!-- JWT (access tokens only - refresh tokens are opaque random values, see JwtService) -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
@@ -78,6 +91,13 @@
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
             <version>${mapstruct.version}</version>
+        </dependency>
+
+        <!-- Structured JSON logging for docker/prod (see logback-spring.xml, docs/v2/architecture.md#logging) -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>8.1</version>
         </dependency>
 
         <!-- MySQL Driver -->

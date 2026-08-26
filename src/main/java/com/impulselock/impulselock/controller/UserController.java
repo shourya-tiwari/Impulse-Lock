@@ -6,6 +6,7 @@ import com.impulselock.impulselock.dto.UserProfileResponse;
 import com.impulselock.impulselock.entity.User;
 import com.impulselock.impulselock.security.SecurityUser;
 import com.impulselock.impulselock.service.UserService;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -41,7 +42,7 @@ public class UserController {
 
     @PutMapping("/me/preferences")
     public ResponseEntity<UserProfileResponse> updatePreferences(@AuthenticationPrincipal SecurityUser principal,
-                                                                   @RequestBody UserPreferencesUpdateRequest request) {
+                                                                   @Valid @RequestBody UserPreferencesUpdateRequest request) {
         User updated = userService.updatePreferences(principal.getUsername(), request);
         return ResponseEntity.ok(new UserProfileResponse(updated));
     }
@@ -54,7 +55,7 @@ public class UserController {
 
     @PostMapping("/me/restricted-categories")
     public ResponseEntity<List<String>> addRestrictedCategory(@AuthenticationPrincipal SecurityUser principal,
-                                                                @RequestBody RestrictedCategoryRequest request) {
+                                                                @Valid @RequestBody RestrictedCategoryRequest request) {
         User updated = userService.addRestrictedCategory(principal.getUsername(), request.getCategory());
         return ResponseEntity.ok(updated.getRestrictedCategoryNames());
     }

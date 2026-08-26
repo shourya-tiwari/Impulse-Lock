@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Human-readable pattern logging by default (local dev); structured JSON in the docker/prod
+  profiles (see docs/v2/architecture.md#logging and docs/v2/deployment-plan.md). Both include
+  the request correlation ID (see CorrelationIdFilter) via MDC so a single request's log lines -
+  and its audit_log row, via AuditLogService.record's correlationId column - can all be tied
+  together.
+
+  Only one profile currently exists (see docs/v2/tasks.md, Phase 0's note that the dev/docker/
+  prod split arrives in Phase 6) - the <springProfile> blocks below are forward-compatible
+  infrastructure, matching how earlier phases added forward-looking pieces (e.g. Phase 1's
+  /api/v2/admin/** rule before an admin controller existed) ahead of the phase that activates
+  them.
+-->
+<configuration>
+
+    <springProfile name="!(docker | prod)">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} [correlationId=%X{correlationId:-none}] - %msg%n</pattern>
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <springProfile name="docker | prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>correlationId</includeMdcKeyName>
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+    <logger name="com.impulselock.impulselock" level="DEBUG"/>
+
+</configuration>

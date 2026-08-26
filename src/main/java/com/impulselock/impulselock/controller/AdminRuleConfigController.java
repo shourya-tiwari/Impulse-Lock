@@ -5,6 +5,7 @@ import com.impulselock.impulselock.dto.RuleConfigUpdateRequest;
 import com.impulselock.impulselock.entity.RuleConfig;
 import com.impulselock.impulselock.mapper.RuleConfigMapper;
 import com.impulselock.impulselock.service.RuleConfigService;
+import jakarta.validation.Valid;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +42,7 @@ public class AdminRuleConfigController {
 
     @PutMapping("/{ruleCode}")
     public ResponseEntity<RuleConfigResponseDto> update(@PathVariable String ruleCode,
-                                                         @RequestBody RuleConfigUpdateRequest request) {
+                                                         @Valid @RequestBody RuleConfigUpdateRequest request) {
         RuleConfig updated = ruleConfigService.update(ruleCode, request.getWeight(), request.isEnabled(), request.getParams());
         return ResponseEntity.ok(ruleConfigMapper.toResponse(updated));
     }

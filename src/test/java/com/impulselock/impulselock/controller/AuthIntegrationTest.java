@@ -36,8 +36,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class AuthIntegrationTest extends AbstractIntegrationTest {
 
+    // restrictedCategories is deliberately not part of this request - see
+    // UserPreferencesUpdateRequest's Phase 4 cleanup note.
     private static final String PREFERENCES_BODY =
-            "{\"dailyLimit\":1500,\"nightSpendingAllowed\":false,\"sensitivityLevel\":6,\"restrictedCategories\":[\"gaming\"]}";
+            "{\"dailyLimit\":1500,\"nightSpendingAllowed\":false,\"sensitivityLevel\":6}";
 
     @Autowired
     private MockMvc mockMvc;
@@ -107,8 +109,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(PREFERENCES_BODY))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.sensitivityLevel").value(6))
-                .andExpect(jsonPath("$.restrictedCategories[0]").value("gaming"));
+                .andExpect(jsonPath("$.sensitivityLevel").value(6));
     }
 
     @Test

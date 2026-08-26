@@ -45,6 +45,23 @@ class TransactionControllerIntegrationTest extends AbstractIntegrationTest {
     private RoleRepository roleRepository;
 
     @Test
+    void evaluateRejectsNegativeAmountWithFieldErrorAndCorrelationId() throws Exception {
+        String token = registerUser("judy");
+
+        MvcResult result = mockMvc.perform(post("/api/v2/transactions/evaluate")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("amount", -50))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("amount"))
+                .andExpect(jsonPath("$.correlationId").isNotEmpty())
+                .andReturn();
+
+        // Phase 4's CorrelationIdFilter echoes the same ID as a response header.
+        assertThat(result.getResponse().getHeader("X-Request-Id")).isNotBlank();
+    }
+
+    @Test
     void evaluatePersistsTransactionAndReturnsRiskDetails() throws Exception {
         String token = registerUser("alice");
 

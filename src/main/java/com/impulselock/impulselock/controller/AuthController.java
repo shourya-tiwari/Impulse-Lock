@@ -9,6 +9,7 @@ import com.impulselock.impulselock.exception.InvalidRefreshTokenException;
 import com.impulselock.impulselock.security.JwtService;
 import com.impulselock.impulselock.security.RefreshTokenService;
 import com.impulselock.impulselock.service.AuthService;
+import jakarta.validation.Valid;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -22,9 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * New in Phase 1 - placed directly under {@code /api/v2/auth} (the eventual V2 base path,
- * see docs/v2/api-design.md) since there is no legacy V1 auth endpoint to preserve. The
- * still-transitional {@code /transaction} and {@code /users} endpoints stay at their existing
- * paths until Phase 3's full API redesign moves them under {@code /api/v2} too.
+ * see docs/v2/api-design.md) since there is no legacy V1 auth endpoint to preserve.
  */
 @RestController
 @RequestMapping("/api/v2/auth")
@@ -49,12 +48,12 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<AuthResponse> register(@RequestBody RegisterRequest request) {
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         return respondWithNewSession(authService.register(request));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return respondWithNewSession(authService.login(request));
     }
 

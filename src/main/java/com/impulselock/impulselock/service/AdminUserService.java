@@ -1,5 +1,6 @@
 package com.impulselock.impulselock.service;
 
+import com.impulselock.impulselock.audit.Auditable;
 import com.impulselock.impulselock.entity.User;
 import com.impulselock.impulselock.exception.UserNotFoundException;
 import com.impulselock.impulselock.repository.UserRepository;
@@ -34,10 +35,11 @@ public class AdminUserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found for id: " + id));
     }
 
+    @Auditable(action = "ADMIN_USER_STATUS_CHANGED", entityType = "USER")
     @Transactional
     public User updateStatus(Long id, boolean enabled) {
         User user = findById(id);
         user.setEnabled(enabled);
-        return userRepository.save(user);
+        return DatabaseOperations.execute(() -> userRepository.save(user), "Failed to save user in database");
     }
 }

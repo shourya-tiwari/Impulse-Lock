@@ -1,7 +1,12 @@
 package com.impulselock.impulselock.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 public class RestrictedCategoryRequest {
 
+    @NotBlank
+    @Size(max = 50)
     private String category;
 
     public String getCategory() {

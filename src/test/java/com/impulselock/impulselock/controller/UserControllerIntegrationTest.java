@@ -43,6 +43,10 @@ class UserControllerIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void updatePreferencesAppliesNewValues() throws Exception {
+        // restrictedCategories is deliberately not part of this request (see
+        // UserPreferencesUpdateRequest's Phase 4 cleanup note) - restricted-category coverage
+        // lives in the dedicated tests below instead. This user's registration-time default
+        // ("LUXURY") is therefore expected to survive the preferences update untouched.
         String token = registerUser("bob");
 
         mockMvc.perform(put("/api/v2/users/me/preferences")
@@ -51,13 +55,27 @@ class UserControllerIntegrationTest extends AbstractIntegrationTest {
                         .content(objectMapper.writeValueAsString(Map.of(
                                 "dailyLimit", 2000,
                                 "nightSpendingAllowed", true,
-                                "sensitivityLevel", 7,
-                                "restrictedCategories", java.util.List.of("gaming")))))
+                                "sensitivityLevel", 7))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.dailyLimit").value(2000))
                 .andExpect(jsonPath("$.nightSpendingAllowed").value(true))
                 .andExpect(jsonPath("$.sensitivityLevel").value(7))
-                .andExpect(jsonPath("$.restrictedCategories[0]").value("gaming"));
+                .andExpect(jsonPath("$.restrictedCategories[0]").value("LUXURY"));
+    }
+
+    @Test
+    void updatePreferencesRejectsOutOfRangeSensitivityLevel() throws Exception {
+        String token = registerUser("frank");
+
+        mockMvc.perform(put("/api/v2/users/me/preferences")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "dailyLimit", 2000,
+                                "nightSpendingAllowed", true,
+                                "sensitivityLevel", 11))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("sensitivityLevel"));
     }
 
     @Test

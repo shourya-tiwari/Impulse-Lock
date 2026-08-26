@@ -1,11 +1,16 @@
 package com.impulselock.impulselock.dto;
 
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.util.Map;
 
 public class RuleConfigUpdateRequest {
 
+    @NotNull
+    @DecimalMin("0.0")
     private BigDecimal weight;
+
     private boolean enabled;
     private Map<String, Object> params;
 

@@ -9,6 +9,7 @@ import com.impulselock.impulselock.mapper.TransactionMapper;
 import com.impulselock.impulselock.model.DecisionType;
 import com.impulselock.impulselock.security.SecurityUser;
 import com.impulselock.impulselock.service.TransactionService;
+import jakarta.validation.Valid;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.math.BigDecimal;
@@ -51,7 +52,7 @@ public class TransactionController {
 
     @PostMapping("/evaluate")
     public ResponseEntity<TransactionResponseDto> evaluate(@AuthenticationPrincipal SecurityUser principal,
-                                                             @RequestBody TransactionEvaluateRequest request) {
+                                                             @Valid @RequestBody TransactionEvaluateRequest request) {
         Transaction transaction = transactionService.evaluateAndSave(principal.getUsername(), request);
         return ResponseEntity.ok(transactionMapper.toResponse(transaction));
     }

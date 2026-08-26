@@ -1,18 +1,15 @@
 package com.impulselock.impulselock.service;
 
+import com.impulselock.impulselock.audit.Auditable;
 import com.impulselock.impulselock.dto.UserPreferencesUpdateRequest;
 import com.impulselock.impulselock.entity.RestrictedCategory;
 import com.impulselock.impulselock.entity.Role;
 import com.impulselock.impulselock.entity.User;
-import com.impulselock.impulselock.exception.DatabaseOperationException;
 import com.impulselock.impulselock.exception.UserNotFoundException;
 import com.impulselock.impulselock.repository.RoleRepository;
 import com.impulselock.impulselock.repository.UserRepository;
-import java.math.BigDecimal;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
-import org.springframework.dao.DataAccessException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,13 +52,18 @@ public class UserService {
         // as an explicit, visible, editable row instead of an implicit rule-level fallback.
         user.getRestrictedCategories().add(new RestrictedCategory(user, DEFAULT_RESTRICTED_CATEGORY));
 
-        try {
-            return userRepository.save(user);
-        } catch (DataAccessException exception) {
-            throw new DatabaseOperationException("Failed to save user in database", exception);
-        }
+        return DatabaseOperations.execute(() -> userRepository.save(user), "Failed to save user in database");
     }
 
+    /**
+     * {@code restrictedCategories} is no longer part of this request (see
+     * {@code UserPreferencesUpdateRequest}'s Phase 4 cleanup note) - restricted-category
+     * management goes exclusively through {@link #addRestrictedCategory}/
+     * {@link #removeRestrictedCategory} now. Bean Validation on the request DTO guarantees
+     * dailyLimit/sensitivityLevel are non-null and in range before this method ever runs, so the
+     * old null-tolerant fallback logic is gone too.
+     */
+    @Auditable(action = "PREFERENCES_UPDATED", entityType = "USER")
     @Transactional
     public User updatePreferences(String username, UserPreferencesUpdateRequest request) {
         if (request == null) {
@@ -71,25 +73,11 @@ public class UserService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UserNotFoundException("User not found for username: " + username));
 
-        user.setDailyLimit(request.getDailyLimit() != null ? request.getDailyLimit() : BigDecimal.ZERO);
+        user.setDailyLimit(request.getDailyLimit());
         user.setNightSpendingAllowed(request.isNightSpendingAllowed());
-        user.setSensitivityLevel(request.getSensitivityLevel() == 0 ? 5 : request.getSensitivityLevel());
+        user.setSensitivityLevel(request.getSensitivityLevel());
 
-        List<String> categories = request.getRestrictedCategories();
-        if (categories != null) {
-            user.getRestrictedCategories().clear();
-            for (String category : categories) {
-                if (category != null && !category.isBlank()) {
-                    user.getRestrictedCategories().add(new RestrictedCategory(user, category.trim()));
-                }
-            }
-        }
-
-        try {
-            return userRepository.save(user);
-        } catch (DataAccessException exception) {
-            throw new DatabaseOperationException("Failed to save user in database", exception);
-        }
+        return DatabaseOperations.execute(() -> userRepository.save(user), "Failed to save user in database");
     }
 
     @Transactional(readOnly = true)
@@ -98,6 +86,7 @@ public class UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found for username: " + username));
     }
 
+    @Auditable(action = "RESTRICTED_CATEGORY_ADDED", entityType = "USER")
     @Transactional
     public User addRestrictedCategory(String username, String category) {
         if (category == null || category.isBlank()) {
@@ -111,22 +100,15 @@ public class UserService {
             user.getRestrictedCategories().add(new RestrictedCategory(user, normalized));
         }
 
-        try {
-            return userRepository.save(user);
-        } catch (DataAccessException exception) {
-            throw new DatabaseOperationException("Failed to save user in database", exception);
-        }
+        return DatabaseOperations.execute(() -> userRepository.save(user), "Failed to save user in database");
     }
 
+    @Auditable(action = "RESTRICTED_CATEGORY_REMOVED", entityType = "USER")
     @Transactional
     public User removeRestrictedCategory(String username, String category) {
         User user = getProfile(username);
         user.getRestrictedCategories().removeIf(rc -> rc.getCategory().equalsIgnoreCase(category));
 
-        try {
-            return userRepository.save(user);
-        } catch (DataAccessException exception) {
-            throw new DatabaseOperationException("Failed to save user in database", exception);
-        }
+        return DatabaseOperations.execute(() -> userRepository.save(user), "Failed to save user in database");
     }
 }

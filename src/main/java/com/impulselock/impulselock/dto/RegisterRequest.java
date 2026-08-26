@@ -1,13 +1,26 @@
 package com.impulselock.impulselock.dto;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+
 /**
- * Bean Validation annotations arrive in Phase 4 (see docs/v2/tasks.md, Phase 1's own note:
- * "the DTO classes are created here" - validation is deferred deliberately, not forgotten).
+ * Bean Validation arrives in Phase 4 (see docs/v2/tasks.md, Phase 1's own note: "the DTO classes
+ * are created here" - validation was deferred deliberately, not forgotten). Password minimum
+ * length matches the V2 baseline documented in docs/v2/security-design.md#validation.
  */
 public class RegisterRequest {
 
+    @NotBlank
+    @Size(min = 3, max = 50)
     private String username;
+
+    @NotBlank
+    @Email
     private String email;
+
+    @NotBlank
+    @Size(min = 8, max = 100)
     private String password;
 
     public String getUsername() {

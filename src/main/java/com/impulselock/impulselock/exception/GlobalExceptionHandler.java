@@ -1,11 +1,21 @@
 package com.impulselock.impulselock.exception;
 
 import com.impulselock.impulselock.dto.ErrorResponse;
+import com.impulselock.impulselock.dto.FieldErrorDto;
+import com.impulselock.impulselock.logging.CorrelationIdFilter;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -57,14 +67,72 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.UNAUTHORIZED, "Invalid username or password", request.getRequestURI());
     }
 
+    /**
+     * Reachable for AccessDeniedException thrown from within a controller/service call (e.g.
+     * DashboardService's admin-only cross-user check) - URL-level authorizeHttpRequests denials
+     * never reach here at all (AuthorizationFilter runs before DispatcherServlet, so those go
+     * straight to RestAccessDeniedHandler via ExceptionTranslationFilter). Unlike
+     * RestAccessDeniedHandler's fixed generic message, this uses the exception's own message,
+     * since a manually-thrown AccessDeniedException usually has a more specific one worth
+     * surfacing.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException exception,
+                                                             HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.FORBIDDEN, exception.getMessage(), request.getRequestURI());
+    }
+
+    /**
+     * Defensive - JwtService.parseClaims already catches JwtException internally and returns
+     * Optional.empty(), so JwtAuthenticationFilter never lets one propagate this far in practice.
+     * Kept in case a future JWT-touching code path doesn't swallow it the same way.
+     */
+    @ExceptionHandler(JwtException.class)
+    public ResponseEntity<ErrorResponse> handleJwtException(JwtException exception, HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.UNAUTHORIZED, "Invalid or expired token", request.getRequestURI());
+    }
+
+    /**
+     * A genuine DB constraint violation that slipped past an in-memory pre-check (e.g. a race
+     * between two concurrent requests both passing a duplicate-check before either inserts).
+     * Every service method that saves an entity routes DataAccessException through
+     * DatabaseOperations.execute (see docs/v2/tasks.md, Phase 4), which lets this specific
+     * subtype through unwrapped so it lands here instead of being folded into the generic 500
+     * DatabaseOperationException produces.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException exception,
+                                                                       HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.CONFLICT,
+                "The request conflicts with existing data (e.g. a duplicate value)", request.getRequestURI());
+    }
+
     @ExceptionHandler(DatabaseOperationException.class)
     public ResponseEntity<ErrorResponse> handleDatabaseError(DatabaseOperationException exception,
                                                              HttpServletRequest request) {
         return buildErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage(), request.getRequestURI());
     }
 
-    @ExceptionHandler({IllegalArgumentException.class, MethodArgumentNotValidException.class})
-    public ResponseEntity<ErrorResponse> handleBadRequest(Exception exception, HttpServletRequest request) {
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidationFailure(MethodArgumentNotValidException exception,
+                                                                  HttpServletRequest request) {
+        List<FieldErrorDto> fieldErrors = exception.getBindingResult().getFieldErrors().stream()
+                .map(this::toFieldErrorDto)
+                .collect(Collectors.toList());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), fieldErrors);
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException exception,
+                                                                    HttpServletRequest request) {
+        List<FieldErrorDto> fieldErrors = exception.getConstraintViolations().stream()
+                .map(violation -> new FieldErrorDto(violation.getPropertyPath().toString(), violation.getMessage()))
+                .collect(Collectors.toList());
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Validation failed", request.getRequestURI(), fieldErrors);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleBadRequest(IllegalArgumentException exception, HttpServletRequest request) {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI());
     }
 
@@ -77,13 +145,24 @@ public class GlobalExceptionHandler {
         );
     }
 
+    private FieldErrorDto toFieldErrorDto(FieldError fieldError) {
+        return new FieldErrorDto(fieldError.getField(), fieldError.getDefaultMessage());
+    }
+
     private ResponseEntity<ErrorResponse> buildErrorResponse(HttpStatus status, String message, String path) {
+        return buildErrorResponse(status, message, path, null);
+    }
+
+    private ResponseEntity<ErrorResponse> buildErrorResponse(HttpStatus status, String message, String path,
+                                                              List<FieldErrorDto> fieldErrors) {
         ErrorResponse response = new ErrorResponse();
         response.setTimestamp(LocalDateTime.now());
         response.setStatus(status.value());
         response.setError(status.getReasonPhrase());
         response.setMessage(message);
         response.setPath(path);
+        response.setCorrelationId(MDC.get(CorrelationIdFilter.MDC_KEY));
+        response.setFieldErrors(fieldErrors);
         return ResponseEntity.status(status).body(response);
     }
 }

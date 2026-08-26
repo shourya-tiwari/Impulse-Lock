@@ -1,6 +1,7 @@
 package com.impulselock.impulselock.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public class ErrorResponse {
 
@@ -9,6 +10,8 @@ public class ErrorResponse {
     private String error;
     private String message;
     private String path;
+    private String correlationId;
+    private List<FieldErrorDto> fieldErrors;
 
     public LocalDateTime getTimestamp() {
         return timestamp;
@@ -48,5 +51,22 @@ public class ErrorResponse {
 
     public void setPath(String path) {
         this.path = path;
+    }
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
+    }
+
+    /** Populated only for validation failures (see docs/v2/api-design.md#error-format). */
+    public List<FieldErrorDto> getFieldErrors() {
+        return fieldErrors;
+    }
+
+    public void setFieldErrors(List<FieldErrorDto> fieldErrors) {
+        this.fieldErrors = fieldErrors;
     }
 }

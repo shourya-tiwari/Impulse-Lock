@@ -1,5 +1,6 @@
 package com.impulselock.impulselock.service;
 
+import com.impulselock.impulselock.audit.Auditable;
 import com.impulselock.impulselock.dto.TransactionEvaluateRequest;
 import com.impulselock.impulselock.dto.TransactionHistoryFilter;
 import com.impulselock.impulselock.engine.DecisionEngine;
@@ -7,7 +8,6 @@ import com.impulselock.impulselock.engine.RuleContext;
 import com.impulselock.impulselock.engine.RuleContextFactory;
 import com.impulselock.impulselock.entity.Transaction;
 import com.impulselock.impulselock.entity.User;
-import com.impulselock.impulselock.exception.DatabaseOperationException;
 import com.impulselock.impulselock.exception.TransactionNotFoundException;
 import com.impulselock.impulselock.exception.UserNotFoundException;
 import com.impulselock.impulselock.model.Decision;
@@ -21,7 +21,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.springframework.dao.DataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -62,6 +61,7 @@ public class TransactionService {
         this.rules = rules;
     }
 
+    @Auditable(action = "TRANSACTION_EVALUATED", entityType = "TRANSACTION")
     @Transactional
     public Transaction evaluateAndSave(String username, TransactionEvaluateRequest request) {
         if (request == null) {
@@ -90,11 +90,7 @@ public class TransactionService {
         transaction.setExplanation(decision.getExplanation());
         transaction.setTriggeredRules(decision.getTriggeredRules());
 
-        try {
-            transactionRepository.save(transaction);
-        } catch (DataAccessException exception) {
-            throw new DatabaseOperationException("Failed to save transaction in database", exception);
-        }
+        DatabaseOperations.execute(() -> transactionRepository.save(transaction), "Failed to save transaction in database");
 
         return transaction;
     }
@@ -125,7 +121,12 @@ public class TransactionService {
         return transactionRepository.findAll(buildSpecification(user, filter), pageable);
     }
 
-    /** Row-capped, unpaginated - backs the CSV export (see TransactionController). */
+    /**
+     * Row-capped, unpaginated - backs the CSV export (see TransactionController). Audited
+     * unconditionally (every export is worth recording, unlike the dashboard's admin-only
+     * cross-user view - see docs/v2/tasks.md, Phase 3's deferred-to-Phase-4 note).
+     */
+    @Auditable(action = "TRANSACTION_HISTORY_EXPORTED", entityType = "TRANSACTION")
     @Transactional(readOnly = true)
     public List<Transaction> searchForExport(String username, TransactionHistoryFilter filter) {
         User user = userRepository.findByUsername(username)

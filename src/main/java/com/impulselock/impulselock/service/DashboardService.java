@@ -27,10 +27,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Every method is scoped to the authenticated caller by default; passing {@code targetUserId}
  * lets a {@code ROLE_ADMIN} caller view another user's dashboard (see
- * docs/v2/api-design.md#dashboard-endpoints-apiv2dashboard--authenticated-new-in-v2).
- * <b>Deviation</b>: that api-design.md section calls the admin override "audit-logged as an
- * admin cross-user view" - the audit writer doesn't exist until Phase 4, so this override works
- * but isn't logged yet (see docs/v2/tasks.md, Phase 3's note).
+ * docs/v2/api-design.md#dashboard-endpoints-apiv2dashboard--authenticated-new-in-v2), audited
+ * via a direct {@code AuditLogService.record} call in {@link #resolveTargetUser} rather than
+ * {@code @Auditable} - only the admin-override branch is audit-worthy, not every routine
+ * self-view, and {@code @Auditable} has no built-in support for "only sometimes" (see
+ * {@code AuditAspect}'s javadoc).
  *
  * <p>Aggregates are computed in-memory over one fetched 30-day transaction list per call rather
  * than via separate SQL aggregate queries - consistent with how {@code RuleContextFactory}/rules
@@ -43,10 +44,13 @@ public class DashboardService {
 
     private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
+    private final AuditLogService auditLogService;
 
-    public DashboardService(UserRepository userRepository, TransactionRepository transactionRepository) {
+    public DashboardService(UserRepository userRepository, TransactionRepository transactionRepository,
+                             AuditLogService auditLogService) {
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -130,8 +134,11 @@ public class DashboardService {
         if (!principal.isAdmin()) {
             throw new AccessDeniedException("Only admins may view another user's dashboard");
         }
-        return userRepository.findById(targetUserId)
+        User targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new UserNotFoundException("User not found for id: " + targetUserId));
+
+        auditLogService.record("ADMIN_DASHBOARD_CROSS_USER_VIEW", "USER", targetUser.getUsername(), null);
+        return targetUser;
     }
 
     private long countByDecision(List<Transaction> transactions, DecisionType type) {
