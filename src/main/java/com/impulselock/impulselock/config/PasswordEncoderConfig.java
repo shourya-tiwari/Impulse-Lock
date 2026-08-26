@@ -6,10 +6,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 /**
- * Password hashing only (spring-security-crypto) - no filter chain, no auto-configured
- * endpoint security yet. That full Spring Security setup is Phase 1 (see docs/v2/security-design.md).
- * Defined now so passwords are hashed correctly from the very first user ever created,
- * rather than retrofitted once Phase 1 lands.
+ * Defined as its own bean (rather than inline in SecurityConfig) since it was introduced back
+ * in Phase 0 - before the filter chain existed - so passwords were hashed correctly from the
+ * very first user ever created. Also consumed by Spring Security's auto-configured
+ * DaoAuthenticationProvider (see SecurityConfig): with exactly one PasswordEncoder and one
+ * UserDetailsService bean in context, Spring wires them together with no extra config.
  */
 @Configuration
 public class PasswordEncoderConfig {

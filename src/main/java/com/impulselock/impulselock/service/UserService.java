@@ -1,31 +1,34 @@
 package com.impulselock.impulselock.service;
 
-import com.impulselock.impulselock.dto.UserUpsertRequest;
+import com.impulselock.impulselock.dto.UserPreferencesUpdateRequest;
 import com.impulselock.impulselock.entity.RestrictedCategory;
 import com.impulselock.impulselock.entity.Role;
 import com.impulselock.impulselock.entity.User;
 import com.impulselock.impulselock.exception.DatabaseOperationException;
+import com.impulselock.impulselock.exception.UserNotFoundException;
 import com.impulselock.impulselock.repository.RoleRepository;
 import com.impulselock.impulselock.repository.UserRepository;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.dao.DataAccessException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Transitional home for user-preference upserts while Phase 1 (real registration/login) doesn't
- * exist yet - see {@code UserUpsertRequest} and docs/v2/security-design.md. V1 had no service
- * layer here at all (UserController talked to the repository directly, see docs/v1/backend.md);
- * this class exists now because creating a user involves more than one repository call (hashing
- * a password, assigning a default role, seeding a default restricted category).
+ * Account creation now lives here only via {@link #registerNewUser} (called from
+ * {@code AuthService.register}, see docs/v2/security-design.md) - the Phase 0 transitional
+ * {@code upsertUser(UserUpsertRequest)} that both created and updated accounts through one
+ * unauthenticated endpoint is gone; {@link #updatePreferences} only ever operates on an
+ * already-authenticated caller's own account.
  */
 @Service
 public class UserService {
 
     private static final String DEFAULT_RESTRICTED_CATEGORY = "LUXURY";
+    private static final String USER_ROLE_NAME = "ROLE_USER";
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
@@ -38,21 +41,19 @@ public class UserService {
     }
 
     @Transactional
-    public User upsertUser(UserUpsertRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("User request body is required");
-        }
-        if (request.getUsername() == null || request.getUsername().isBlank()) {
-            throw new IllegalArgumentException("username is required");
-        }
+    public User registerNewUser(String username, String email, String rawPassword) {
+        User user = new User();
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setPasswordHash(passwordEncoder.encode(rawPassword));
 
-        User user = userRepository.findByUsername(request.getUsername()).orElse(null);
+        Role userRole = roleRepository.findByName(USER_ROLE_NAME)
+                .orElseThrow(() -> new IllegalStateException(USER_ROLE_NAME + " is missing - seed migration did not run"));
+        user.setRoles(new HashSet<>(Set.of(userRole)));
 
-        if (user == null) {
-            user = createUser(request);
-        } else {
-            applyPreferences(user, request);
-        }
+        // Preserves V1's default behavior (see docs/v1/rule-engine.md#categoryrestrictionrule)
+        // as an explicit, visible, editable row instead of an implicit rule-level fallback.
+        user.getRestrictedCategories().add(new RestrictedCategory(user, DEFAULT_RESTRICTED_CATEGORY));
 
         try {
             return userRepository.save(user);
@@ -61,36 +62,15 @@ public class UserService {
         }
     }
 
-    private User createUser(UserUpsertRequest request) {
-        if (request.getEmail() == null || request.getEmail().isBlank()) {
-            throw new IllegalArgumentException("email is required to create a new user");
-        }
-        if (request.getPassword() == null || request.getPassword().isBlank()) {
-            throw new IllegalArgumentException("password is required to create a new user");
+    @Transactional
+    public User updatePreferences(String username, UserPreferencesUpdateRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("Preferences request body is required");
         }
 
-        User user = new User();
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
-        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found for username: " + username));
 
-        Role userRole = roleRepository.findByName("ROLE_USER")
-                .orElseThrow(() -> new IllegalStateException("ROLE_USER is missing - seed migration did not run"));
-        user.setRoles(new HashSet<>(List.of(userRole)));
-
-        applyPreferences(user, request);
-
-        List<String> categories = request.getRestrictedCategories();
-        if (categories == null || categories.isEmpty()) {
-            // Preserves V1's default behavior (see docs/v1/rule-engine.md#categoryrestrictionrule)
-            // as an explicit, visible, editable row instead of an implicit rule-level fallback.
-            user.getRestrictedCategories().add(new RestrictedCategory(user, DEFAULT_RESTRICTED_CATEGORY));
-        }
-
-        return user;
-    }
-
-    private void applyPreferences(User user, UserUpsertRequest request) {
         user.setDailyLimit(request.getDailyLimit() != null ? request.getDailyLimit() : BigDecimal.ZERO);
         user.setNightSpendingAllowed(request.isNightSpendingAllowed());
         user.setSensitivityLevel(request.getSensitivityLevel() == 0 ? 5 : request.getSensitivityLevel());
@@ -103,6 +83,12 @@ public class UserService {
                     user.getRestrictedCategories().add(new RestrictedCategory(user, category.trim()));
                 }
             }
+        }
+
+        try {
+            return userRepository.save(user);
+        } catch (DataAccessException exception) {
+            throw new DatabaseOperationException("Failed to save user in database", exception);
         }
     }
 }

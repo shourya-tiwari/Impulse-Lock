@@ -18,10 +18,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Re-pointed at the JPA entities/repositories introduced in Phase 0 (see docs/v2/tasks.md,
- * Phase 0). {@code request.username} is a transitional stand-in for the authenticated caller
- * identity - Phase 1 removes it and resolves the acting user from the security context instead
- * (see docs/v2/security-design.md).
+ * {@code username} now comes from the authenticated JWT principal (see
+ * {@code TransactionController}), never from the request body - closes
+ * docs/v1/design-decisions.md item 7. The lookup-by-username still happens here (rather than
+ * trusting a detached {@code User} passed in from the security filter's own, already-closed
+ * transaction) to avoid a LazyInitializationException on {@code restrictedCategories} and to
+ * guard the rare race where the account is deleted between token validation and this call.
  */
 @Service
 public class TransactionService {
@@ -42,19 +44,16 @@ public class TransactionService {
     }
 
     @Transactional
-    public Decision evaluateAndSave(TransactionEvaluateRequest request) {
+    public Decision evaluateAndSave(String username, TransactionEvaluateRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("Transaction request body is required");
-        }
-        if (request.getUsername() == null || request.getUsername().isBlank()) {
-            throw new IllegalArgumentException("username is required");
         }
         if (request.getAmount() == null) {
             throw new IllegalArgumentException("amount is required");
         }
 
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new UserNotFoundException("User not found for username: " + request.getUsername()));
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found for username: " + username));
 
         Transaction transaction = new Transaction();
         transaction.setPublicId(UUID.randomUUID().toString());
