@@ -62,4 +62,9 @@ public class SecurityUser implements UserDetails {
     public boolean isEnabled() {
         return user.isEnabled();
     }
+
+    /** Used for the "own resource, or admin" ownership checks in Phase 3's controllers/services. */
+    public boolean isAdmin() {
+        return user.getRoles().stream().anyMatch(role -> "ROLE_ADMIN".equals(role.getName()));
+    }
 }

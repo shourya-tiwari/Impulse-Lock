@@ -2,19 +2,14 @@ package com.impulselock.impulselock.repository;
 
 import com.impulselock.impulselock.entity.Transaction;
 import com.impulselock.impulselock.entity.User;
+import com.impulselock.impulselock.model.DecisionType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import org.springframework.data.jpa.domain.Specification;
 
 /**
  * Dynamic filter builders for the advanced transaction-history endpoint (wired up to
- * {@code GET /api/v2/transactions/history} in Phase 3 - see docs/v2/api-design.md). Not yet
- * called from any controller in Phase 0; exists as persistence-layer infrastructure.
- *
- * <p>A decision-type filter is intentionally not included yet: {@code Transaction.decisionType}
- * isn't mapped on the entity until Phase 2 persists the computed Decision onto the row (see
- * {@link Transaction}'s class-level note and docs/v2/tasks.md, Phase 2). Add {@code byDecisionType}
- * here once that field exists.
+ * {@code GET /api/v2/transactions/history} in Phase 3 - see docs/v2/api-design.md).
  */
 public final class TransactionSpecifications {
 
@@ -50,6 +45,12 @@ public final class TransactionSpecifications {
         return (root, query, cb) -> merchant == null
                 ? cb.conjunction()
                 : cb.equal(cb.lower(root.get("merchant")), merchant.toLowerCase());
+    }
+
+    public static Specification<Transaction> byDecisionType(DecisionType decisionType) {
+        return (root, query, cb) -> decisionType == null
+                ? cb.conjunction()
+                : cb.equal(root.get("decisionType"), decisionType);
     }
 
     public static Specification<Transaction> amountBetween(BigDecimal min, BigDecimal max) {

@@ -91,4 +91,42 @@ public class UserService {
             throw new DatabaseOperationException("Failed to save user in database", exception);
         }
     }
+
+    @Transactional(readOnly = true)
+    public User getProfile(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found for username: " + username));
+    }
+
+    @Transactional
+    public User addRestrictedCategory(String username, String category) {
+        if (category == null || category.isBlank()) {
+            throw new IllegalArgumentException("category is required");
+        }
+
+        User user = getProfile(username);
+        String normalized = category.trim();
+        boolean alreadyPresent = user.getRestrictedCategoryNames().stream().anyMatch(normalized::equalsIgnoreCase);
+        if (!alreadyPresent) {
+            user.getRestrictedCategories().add(new RestrictedCategory(user, normalized));
+        }
+
+        try {
+            return userRepository.save(user);
+        } catch (DataAccessException exception) {
+            throw new DatabaseOperationException("Failed to save user in database", exception);
+        }
+    }
+
+    @Transactional
+    public User removeRestrictedCategory(String username, String category) {
+        User user = getProfile(username);
+        user.getRestrictedCategories().removeIf(rc -> rc.getCategory().equalsIgnoreCase(category));
+
+        try {
+            return userRepository.save(user);
+        } catch (DataAccessException exception) {
+            throw new DatabaseOperationException("Failed to save user in database", exception);
+        }
+    }
 }

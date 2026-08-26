@@ -19,6 +19,18 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.NOT_FOUND, exception.getMessage(), request.getRequestURI());
     }
 
+    /**
+     * Also thrown deliberately for "exists but belongs to someone else" (see
+     * TransactionService.getByPublicId) - a non-owner gets the same 404 an actually-missing
+     * publicId would, so the response never confirms another user's transaction exists (see
+     * docs/v2/api-design.md#error-format).
+     */
+    @ExceptionHandler(TransactionNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleTransactionNotFound(TransactionNotFoundException exception,
+                                                                    HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.NOT_FOUND, exception.getMessage(), request.getRequestURI());
+    }
+
     @ExceptionHandler(UserAlreadyExistsException.class)
     public ResponseEntity<ErrorResponse> handleUserAlreadyExists(UserAlreadyExistsException exception,
                                                                   HttpServletRequest request) {

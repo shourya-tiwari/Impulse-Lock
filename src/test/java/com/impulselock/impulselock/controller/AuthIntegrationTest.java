@@ -92,7 +92,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
 
     @Test
     void protectedEndpointWithoutTokenReturns401() throws Exception {
-        mockMvc.perform(put("/users/me/preferences")
+        mockMvc.perform(put("/api/v2/users/me/preferences")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(PREFERENCES_BODY))
                 .andExpect(status().isUnauthorized());
@@ -102,7 +102,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
     void protectedEndpointWithValidTokenSucceeds() throws Exception {
         String accessToken = registerAndExtract("erin", "erin@example.com", "password123").accessToken();
 
-        mockMvc.perform(put("/users/me/preferences")
+        mockMvc.perform(put("/api/v2/users/me/preferences")
                         .header("Authorization", "Bearer " + accessToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(PREFERENCES_BODY))
@@ -117,7 +117,7 @@ class AuthIntegrationTest extends AbstractIntegrationTest {
         String tampered = accessToken.substring(0, accessToken.length() - 1)
                 + (accessToken.endsWith("a") ? "b" : "a");
 
-        mockMvc.perform(put("/users/me/preferences")
+        mockMvc.perform(put("/api/v2/users/me/preferences")
                         .header("Authorization", "Bearer " + tampered)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(PREFERENCES_BODY))

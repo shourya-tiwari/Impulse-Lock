@@ -4,7 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * Request shape for {@code POST /transaction/evaluate}. No user identifier field - the acting
+ * Request shape for {@code POST /api/v2/transactions/evaluate}. No user identifier field - the acting
  * user is always the authenticated caller, resolved from the JWT (see
  * docs/v2/security-design.md and docs/v2/api-design.md#conventions). Closes
  * docs/v1/design-decisions.md item 7 (client-supplied userId with no ownership check).
