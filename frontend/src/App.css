@@ -287,3 +287,269 @@
   color: rgba(232, 236, 255, 0.88);
   white-space: pre-wrap;
 }
+
+.RuleList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.RuleListItem {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+  color: rgba(232, 236, 255, 0.85);
+}
+
+.RuleCode {
+  font-weight: 700;
+  color: rgba(232, 236, 255, 0.95);
+}
+
+.RuleWeight {
+  color: #f59e0b;
+}
+
+.RuleMessage {
+  color: rgba(232, 236, 255, 0.7);
+}
+
+.LinkButton {
+  display: block;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  color: rgba(99, 178, 241, 0.9);
+  cursor: pointer;
+  font-size: 12.5px;
+  padding: 0;
+  text-align: left;
+}
+
+.FieldError {
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: rgba(248, 113, 113, 0.9);
+}
+
+.AuthGrid {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.AuthGrid .Card {
+  width: 100%;
+  max-width: 380px;
+}
+
+.TagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.Tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+
+.TagRemove {
+  background: none;
+  border: none;
+  color: rgba(248, 113, 113, 0.9);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.Button--secondary {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(232, 236, 255, 0.92);
+}
+
+.DashboardGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+@media (min-width: 860px) {
+  .DashboardGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.StatGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.Stat {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
+}
+
+.StatLabel {
+  font-size: 11px;
+  color: rgba(232, 236, 255, 0.6);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.StatValue {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 750;
+  color: rgba(232, 236, 255, 0.95);
+}
+
+.StatValue--small {
+  font-size: 14px;
+}
+
+.BarList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.BarRow {
+  display: grid;
+  grid-template-columns: 110px 1fr 90px;
+  gap: 8px;
+  align-items: center;
+}
+
+.BarLabel {
+  font-size: 12px;
+  color: rgba(232, 236, 255, 0.78);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.BarTrack {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.BarFill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #22c55e);
+}
+
+.BarValue {
+  font-size: 12px;
+  color: rgba(232, 236, 255, 0.75);
+  text-align: right;
+}
+
+.RiskTrendSvg {
+  width: 100%;
+  height: 140px;
+}
+
+.TableWrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.Table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.Table th,
+.Table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  white-space: nowrap;
+}
+
+.Table th {
+  color: rgba(232, 236, 255, 0.6);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.Sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.Mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: rgba(232, 236, 255, 0.6);
+}
+
+.Badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.Badge--allow {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.Badge--delay {
+  background: rgba(234, 179, 8, 0.15);
+  color: #facc15;
+}
+
+.Badge--block {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.Pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.FilterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.FieldActions {
+  display: flex;
+  align-items: flex-end;
+}
+
+.Textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  resize: vertical;
+}

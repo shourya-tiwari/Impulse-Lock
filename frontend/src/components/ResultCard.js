@@ -59,6 +59,21 @@ export default function ResultCard({
               {String(result.explanation ?? 'N/A')}
             </div>
           </div>
+
+          {Array.isArray(result.triggeredRules) && result.triggeredRules.length > 0 ? (
+            <div className="Explanation">
+              <div className="ExplanationLabel">Triggered rules</div>
+              <ul className="RuleList">
+                {result.triggeredRules.map((rule, idx) => (
+                  <li key={`${rule.ruleCode}-${idx}`} className="RuleListItem">
+                    <span className="RuleCode">{rule.ruleCode}</span>
+                    <span className="RuleWeight">+{rule.weight}</span>
+                    <span className="RuleMessage">{rule.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

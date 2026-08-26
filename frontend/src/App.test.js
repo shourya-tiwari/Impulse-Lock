@@ -1,9 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders transaction evaluation form', () => {
+test('shows the login form when there is no existing session', async () => {
   render(<App />);
-  expect(screen.getByText(/ImpulseLock/i)).toBeInTheDocument();
-  expect(screen.getByText(/Transaction evaluation/i)).toBeInTheDocument();
-  expect(screen.getByText(/Evaluation result/i)).toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: /^Log in$/i })).toBeInTheDocument();
+  expect(screen.getByLabelText(/Username/i)).toBeInTheDocument();
 });

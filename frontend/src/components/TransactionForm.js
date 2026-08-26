@@ -3,9 +3,10 @@ import { postJson } from '../api';
 
 const STORAGE_KEY = 'impulselock:lastTransactionForm';
 
+// userId dropped in Phase 7 - the acting user is always resolved from the access token (see
+// TransactionEvaluateRequest / docs/v1/design-decisions.md item 7).
 export default function TransactionForm({ onResult }) {
   const [form, setForm] = useState({
-    userId: '',
     amount: '',
     category: '',
     merchant: '',
@@ -47,13 +48,12 @@ export default function TransactionForm({ onResult }) {
 
     try {
       const payload = {
-        userId: String(form.userId).trim(),
         amount: Number(form.amount),
         category: String(form.category).trim(),
         merchant: String(form.merchant).trim(),
       };
 
-      const data = await postJson('/transaction/evaluate', payload);
+      const data = await postJson('/api/v2/transactions/evaluate', payload);
       onResult?.({ loading: false, error: '', result: data });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong.';
@@ -67,18 +67,6 @@ export default function TransactionForm({ onResult }) {
   return (
     <form className="Card" onSubmit={onSubmit}>
       <div className="CardTitle">Transaction evaluation</div>
-
-      <label className="Field">
-        <div className="FieldLabel">User ID</div>
-        <input
-          className="Input"
-          value={form.userId}
-          onChange={updateField('userId')}
-          placeholder="e.g. U101"
-          required
-          autoComplete="off"
-        />
-      </label>
 
       <label className="Field">
         <div className="FieldLabel">Amount</div>
@@ -127,4 +115,3 @@ export default function TransactionForm({ onResult }) {
     </form>
   );
 }
-
