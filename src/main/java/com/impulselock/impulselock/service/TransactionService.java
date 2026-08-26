@@ -2,6 +2,8 @@ package com.impulselock.impulselock.service;
 
 import com.impulselock.impulselock.dto.TransactionEvaluateRequest;
 import com.impulselock.impulselock.engine.DecisionEngine;
+import com.impulselock.impulselock.engine.RuleContext;
+import com.impulselock.impulselock.engine.RuleContextFactory;
 import com.impulselock.impulselock.entity.Transaction;
 import com.impulselock.impulselock.entity.User;
 import com.impulselock.impulselock.exception.DatabaseOperationException;
@@ -10,6 +12,7 @@ import com.impulselock.impulselock.model.Decision;
 import com.impulselock.impulselock.repository.TransactionRepository;
 import com.impulselock.impulselock.repository.UserRepository;
 import com.impulselock.impulselock.rules.SpendingRule;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -18,12 +21,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * {@code username} now comes from the authenticated JWT principal (see
- * {@code TransactionController}), never from the request body - closes
- * docs/v1/design-decisions.md item 7. The lookup-by-username still happens here (rather than
- * trusting a detached {@code User} passed in from the security filter's own, already-closed
- * transaction) to avoid a LazyInitializationException on {@code restrictedCategories} and to
- * guard the rare race where the account is deleted between token validation and this call.
+ * {@code username} comes from the authenticated JWT principal (see {@code TransactionController}),
+ * never the request body - closes docs/v1/design-decisions.md item 7. As of Phase 2, the
+ * computed {@link Decision} is also persisted onto the {@code Transaction} row (decisionType,
+ * riskScore, explanation, triggeredRules) - V1/Phase 0/1 only ever returned it to the caller
+ * (see docs/v1/database.md).
  */
 @Service
 public class TransactionService {
@@ -31,15 +33,18 @@ public class TransactionService {
     private final UserRepository userRepository;
     private final TransactionRepository transactionRepository;
     private final DecisionEngine decisionEngine;
+    private final RuleContextFactory ruleContextFactory;
     private final List<SpendingRule> rules;
 
     public TransactionService(UserRepository userRepository,
                               TransactionRepository transactionRepository,
                               DecisionEngine decisionEngine,
+                              RuleContextFactory ruleContextFactory,
                               List<SpendingRule> rules) {
         this.userRepository = userRepository;
         this.transactionRepository = transactionRepository;
         this.decisionEngine = decisionEngine;
+        this.ruleContextFactory = ruleContextFactory;
         this.rules = rules;
     }
 
@@ -63,7 +68,13 @@ public class TransactionService {
         transaction.setMerchant(request.getMerchant());
         transaction.setOccurredAt(request.getOccurredAt() != null ? request.getOccurredAt() : LocalDateTime.now());
 
-        Decision decision = decisionEngine.evaluate(transaction, user, rules);
+        RuleContext context = ruleContextFactory.buildFor(user, transaction.getOccurredAt());
+        Decision decision = decisionEngine.evaluate(transaction, user, rules, context);
+
+        transaction.setDecisionType(decision.getDecisionType());
+        transaction.setRiskScore(BigDecimal.valueOf(decision.getRiskScore()));
+        transaction.setExplanation(decision.getExplanation());
+        transaction.setTriggeredRules(decision.getTriggeredRules());
 
         try {
             transactionRepository.save(transaction);

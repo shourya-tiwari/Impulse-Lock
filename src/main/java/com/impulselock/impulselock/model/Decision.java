@@ -1,10 +1,13 @@
 package com.impulselock.impulselock.model;
 
+import java.util.List;
+
 public class Decision {
 
     private DecisionType decisionType;
     private double riskScore;
     private String explanation;
+    private List<TriggeredRuleEntry> triggeredRules;
 
     public DecisionType getDecisionType() {
         return decisionType;
@@ -28,5 +31,13 @@ public class Decision {
 
     public void setExplanation(String explanation) {
         this.explanation = explanation;
+    }
+
+    public List<TriggeredRuleEntry> getTriggeredRules() {
+        return triggeredRules;
+    }
+
+    public void setTriggeredRules(List<TriggeredRuleEntry> triggeredRules) {
+        this.triggeredRules = triggeredRules;
     }
 }

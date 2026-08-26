@@ -1,8 +1,14 @@
 package com.impulselock.impulselock.entity;
 
+import com.impulselock.impulselock.entity.converter.TriggeredRulesConverter;
+import com.impulselock.impulselock.model.DecisionType;
+import com.impulselock.impulselock.model.TriggeredRuleEntry;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityListeners;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -12,15 +18,16 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 /**
- * Replaces V1's {@code model.Transaction} (see docs/v1/database.md). The underlying table
- * also has decision_type/risk_score/explanation/triggered_rules columns (see V1__init_schema.sql)
- * but they are intentionally left unmapped here - persisting the computed Decision onto the
- * transaction row is Phase 2 work (see docs/v2/tasks.md, Phase 2). Phase 0 matches V1's actual
- * behavior: the Decision is computed and returned to the caller, not stored on the row.
+ * Replaces V1's {@code model.Transaction} (see docs/v1/database.md). decisionType/riskScore/
+ * explanation/triggeredRules are populated by {@code TransactionService} from the
+ * {@code Decision} the engine computes (wired up in Phase 2 - see docs/v2/tasks.md, Phase 2;
+ * Phase 0/1 left these columns nullable and unmapped since V1 never persisted a decision on the
+ * transaction row at all, only returned it to the caller).
  */
 @Entity
 @Table(name = "transactions")
@@ -49,6 +56,20 @@ public class Transaction {
 
     @Column(name = "occurred_at", nullable = false)
     private LocalDateTime occurredAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "decision_type", nullable = false, length = 10)
+    private DecisionType decisionType;
+
+    @Column(name = "risk_score", nullable = false, precision = 5, scale = 2)
+    private BigDecimal riskScore;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String explanation;
+
+    @Convert(converter = TriggeredRulesConverter.class)
+    @Column(name = "triggered_rules", nullable = false, columnDefinition = "JSON")
+    private List<TriggeredRuleEntry> triggeredRules;
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -104,6 +125,38 @@ public class Transaction {
 
     public void setOccurredAt(LocalDateTime occurredAt) {
         this.occurredAt = occurredAt;
+    }
+
+    public DecisionType getDecisionType() {
+        return decisionType;
+    }
+
+    public void setDecisionType(DecisionType decisionType) {
+        this.decisionType = decisionType;
+    }
+
+    public BigDecimal getRiskScore() {
+        return riskScore;
+    }
+
+    public void setRiskScore(BigDecimal riskScore) {
+        this.riskScore = riskScore;
+    }
+
+    public String getExplanation() {
+        return explanation;
+    }
+
+    public void setExplanation(String explanation) {
+        this.explanation = explanation;
+    }
+
+    public List<TriggeredRuleEntry> getTriggeredRules() {
+        return triggeredRules;
+    }
+
+    public void setTriggeredRules(List<TriggeredRuleEntry> triggeredRules) {
+        this.triggeredRules = triggeredRules;
     }
 
     public LocalDateTime getCreatedAt() {

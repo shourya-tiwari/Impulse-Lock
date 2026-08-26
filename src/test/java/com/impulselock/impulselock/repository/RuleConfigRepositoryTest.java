@@ -36,6 +36,17 @@ class RuleConfigRepositoryTest extends AbstractIntegrationTest {
         assertThat(config.getParams()).containsEntry("nightStartHour", 23).containsEntry("nightEndHour", 6);
     }
 
+    @Test
+    void frequentTransactionParamsMatchTheRealVelocityCheckIntroducedInPhase2() {
+        // V5__update_frequent_transaction_rule_params.sql replaces Phase 0's placeholder
+        // amountThreshold param with the real velocity params FrequentTransactionRule now reads.
+        RuleConfig config = ruleConfigRepository.findByRuleCode("FREQUENT_TRANSACTION").orElseThrow();
+
+        assertThat(config.getParams())
+                .containsEntry("velocityWindowMinutes", 10)
+                .containsEntry("velocityCountThreshold", 3);
+    }
+
     private void assertWeight(String ruleCode, String expectedWeight) {
         Optional<RuleConfig> config = ruleConfigRepository.findByRuleCode(ruleCode);
 
