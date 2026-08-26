@@ -38,7 +38,8 @@ backend on `http://localhost:8080`, and the frontend on `http://localhost:3000`.
    Log out and back in afterward so the new role is reflected in a fresh access token.
 
 Swagger UI (interactive API docs) is available at `http://localhost:8080/swagger-ui.html` in the
-default (non-`prod`) setup.
+default (non-`prod`) setup. `GET /actuator/health` is unauthenticated and backs the `backend`
+container's own healthcheck.
 
 ## API overview
 
