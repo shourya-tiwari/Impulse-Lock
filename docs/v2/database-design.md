@@ -1,6 +1,6 @@
 # ImpulseLock V2 — Database Design
 
-Engine: MySQL, accessed via Spring Data JPA/Hibernate (replacing V1's hand-written `JdbcTemplate`). Schema is managed by Flyway migrations (`src/main/resources/db/migration/V1__init.sql`, `V2__...sql`, ...) — `spring.jpa.hibernate.ddl-auto` is set to `validate` in every profile, never `update`/`create`, so the schema is only ever changed by a reviewed migration file, never silently by Hibernate. This directly replaces V1's `spring.sql.init.mode=never` (manual, undocumented setup — see [v1/database.md](../v1/database.md#schema-mismatch-restricted_categories)) with a versioned, reproducible schema history.
+Engine: MySQL, accessed via Spring Data JPA/Hibernate (replacing V1's hand-written `JdbcTemplate`). Schema is managed by Flyway migrations under `src/main/resources/db/migration/`: `V1__init_schema.sql` (full schema), `V2__seed_roles_and_rule_configs.sql` (seeds `ROLE_USER`/`ROLE_ADMIN` and `rule_configs` with V1-equivalent weights), `V3__add_decision_thresholds.sql` (adds the `decision_thresholds` table, seeded 80/40), `V4__tighten_transaction_decision_columns.sql` (backfills then tightens `transactions.decision_type`/`risk_score`/`explanation`/`triggered_rules` to `NOT NULL`, and moves `decision_type` from `ENUM` to `VARCHAR(10)` + `CHECK` — see the `transactions` table below), `V5__update_frequent_transaction_rule_params.sql` (real velocity params for `FREQUENT_TRANSACTION`). `spring.jpa.hibernate.ddl-auto` is set to `validate`, never `update`/`create`, so the schema is only ever changed by a reviewed migration file, never silently by Hibernate. This directly replaces V1's `spring.sql.init.mode=never` (manual, undocumented setup — see [v1/database.md](../v1/database.md#schema-mismatch-restricted_categories)) with a versioned, reproducible schema history.
 
 ## Entity-relationship overview
 
@@ -14,7 +14,8 @@ user_roles ──*───1── roles
 users ──1───────*── restricted_categories
 users ──1───────*── transactions
 users ──1───────*── audit_log  (actor_user_id, nullable for system-initiated entries)
-rule_configs (global + optional per-user override, see below)
+rule_configs (global only - no per-user override was built)
+decision_thresholds (global, single-row - no per-user override, no FK to any other table)
 ```
 
 ## Tables
@@ -54,7 +55,7 @@ Many-to-many, even though V1 has no role concept at all — designed for future 
 |---|---|---|
 | `id` | `BIGINT` PK | |
 | `user_id` | `BIGINT` FK → `users.id`, NOT NULL, ON DELETE CASCADE | |
-| `category` | `VARCHAR(50)` NOT NULL | Stored uppercased/normalized at write time so comparisons in `CategoryRestrictionRule` don't need `equalsIgnoreCase` at read time. |
+| `category` | `VARCHAR(50)` NOT NULL | Stored as provided (trimmed, not case-normalized) — `CategoryRestrictionRule` and `UserService.addRestrictedCategory`'s duplicate check both compare via `equalsIgnoreCase` rather than relying on a stored canonical case. |
 
 Unique constraint `(user_id, category)`. This replaces V1's comma-separated `restricted_categories` string column (which wasn't even in the documented DDL — see [v1/database.md](../v1/database.md#schema-code-mismatch-restricted_categories)) with a normalized one-to-many relationship: no string parsing, no silent truncation at a `VARCHAR` length limit, and categories can be queried/indexed directly.
 
@@ -70,7 +71,7 @@ Unique constraint `(user_id, category)`. This replaces V1's comma-separated `res
 | `category` | `VARCHAR(50)` NULL | |
 | `merchant` | `VARCHAR(100)` NULL | |
 | `occurred_at` | `DATETIME(3)` NOT NULL | Renamed from `timestamp` (reserved-word friction in V1 required backtick-escaping everywhere — see [v1/database.md](../v1/database.md)); millisecond precision to support tie-breaking in "rapid succession" velocity checks. |
-| `decision_type` | `ENUM('ALLOW','DELAY','BLOCK')` NOT NULL | Persisted (V1 computed but never stored the decision on the transaction row itself — it returned it to the client and separately wrote only the transaction fields). Storing it enables real transaction-history filtering by decision outcome. |
+| `decision_type` | `VARCHAR(10)` NOT NULL, `CHECK (decision_type IN ('ALLOW','DELAY','BLOCK'))` | Persisted (V1 computed but never stored the decision on the transaction row itself — it returned it to the client and separately wrote only the transaction fields). Storing it enables real transaction-history filtering by decision outcome. Started as a MySQL `ENUM` in `V1__init_schema.sql` (and nullable, since the write path didn't exist yet); `V4` backfilled existing rows and switched to `VARCHAR` + `CHECK` — Hibernate's `@Enumerated(EnumType.STRING)` mapping validates more reliably under `ddl-auto=validate` against a plain `VARCHAR` than against a vendor-specific `ENUM` type. |
 | `risk_score` | `DECIMAL(5,2)` NOT NULL, `CHECK (risk_score BETWEEN 0 AND 100)` | Capped at 100 at write time (see engine change in [architecture.md](./architecture.md)) — fixes V1's uncapped/unbounded additive score (see [v1/rule-engine.md](../v1/rule-engine.md#score-aggregation-caveat)). |
 | `explanation` | `TEXT` NOT NULL | Same semantic as V1, but see structured alternative below. |
 | `triggered_rules` | `JSON` NOT NULL | New: a structured array of `{ruleCode, weight, message}` for every rule that fired — powers dashboard breakdowns ("which rules fire most often") without parsing the `explanation` string. `explanation` is kept for human-readable display/back-compat; `triggered_rules` is the machine-readable source of truth. |
@@ -88,9 +89,17 @@ Indexes: `(user_id, occurred_at DESC)` — the single most important index, sinc
 | `params` | `JSON` NULL | Rule-specific tunables, e.g. `{"nightStartHour": 23, "nightEndHour": 6}` for `NIGHT_SPENDING`, `{"velocityWindowMinutes": 10, "velocityCountThreshold": 3}` for the real `FREQUENT_TRANSACTION` rule, `{"sensitivityThreshold": 8}` for `SENSITIVITY_LEVEL`. |
 | `updated_at` | `DATETIME` | |
 
-Also fixes the hardcoded `BLOCK`/`DELAY` thresholds (`80`/`40` in V1's `DecisionEngine`) by adding two singleton rows (or a small `decision_thresholds` table: `block_threshold`, `delay_threshold`) rather than leaving them as Java literals — see [v1/rule-engine.md](../v1/rule-engine.md) for the V1 baseline being replaced. Seeded with V1's original values so V2's default behavior matches V1 exactly on day one; only an admin action changes them thereafter.
+This directly resolves the "hardcoded thresholds, not configurable" limitation called out in both [v1/architecture.md](../v1/architecture.md#dependency-injection--bean-wiring) and [v1/rule-engine.md](../v1/rule-engine.md) for rule weights; see `decision_thresholds` below for the BLOCK/DELAY thresholds themselves.
 
-This directly resolves the "hardcoded thresholds, not configurable" limitation called out in both [v1/architecture.md](../v1/architecture.md#dependency-injection--bean-wiring) and [v1/rule-engine.md](../v1/rule-engine.md).
+### `decision_thresholds`
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `BIGINT` PK, auto-increment | |
+| `block_threshold` | `DECIMAL(5,2)` NOT NULL | |
+| `delay_threshold` | `DECIMAL(5,2)` NOT NULL, `CHECK (block_threshold > delay_threshold)` | |
+| `updated_at` | `DATETIME(3)` NOT NULL | |
+
+A single-row table (added in `V3__add_decision_thresholds.sql`) replacing `DecisionEngine`'s hardcoded `80`/`40` `BLOCK`/`DELAY` literals from V1 — seeded with those exact values so V2's default behavior matches V1 on day one; `RuleContextFactory` reads the row fresh on every evaluation (`decisionThresholdsRepository.findTopByOrderByIdAsc()`), so an admin change takes effect on the very next transaction, no deploy needed. See [v1/rule-engine.md](../v1/rule-engine.md) for the V1 baseline being replaced.
 
 ### `refresh_tokens`
 | Column | Type | Notes |

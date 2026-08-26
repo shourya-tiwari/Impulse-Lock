@@ -7,6 +7,7 @@ import com.impulselock.impulselock.dto.UserProfileResponse;
 import com.impulselock.impulselock.entity.User;
 import com.impulselock.impulselock.exception.InvalidRefreshTokenException;
 import com.impulselock.impulselock.security.JwtService;
+import com.impulselock.impulselock.security.LoginRateLimiter;
 import com.impulselock.impulselock.security.RefreshTokenService;
 import com.impulselock.impulselock.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,15 +47,18 @@ public class AuthController {
     private final AuthService authService;
     private final RefreshTokenService refreshTokenService;
     private final JwtService jwtService;
+    private final LoginRateLimiter loginRateLimiter;
     private final long refreshTokenTtlDays;
 
     public AuthController(AuthService authService,
                            RefreshTokenService refreshTokenService,
                            JwtService jwtService,
+                           LoginRateLimiter loginRateLimiter,
                            @Value("${app.jwt.refresh-token-ttl-days}") long refreshTokenTtlDays) {
         this.authService = authService;
         this.refreshTokenService = refreshTokenService;
         this.jwtService = jwtService;
+        this.loginRateLimiter = loginRateLimiter;
         this.refreshTokenTtlDays = refreshTokenTtlDays;
     }
 
@@ -68,10 +73,20 @@ public class AuthController {
 
     @Operation(summary = "Log in with username and password",
             description = "Returns 401 with a deliberately generic message for any failure reason "
-                    + "(wrong username, wrong password, or disabled account) to avoid leaking which case applied.")
+                    + "(wrong username, wrong password, or disabled account) to avoid leaking which case applied. "
+                    + "Returns 429 after too many failed attempts for the same username in a short window "
+                    + "(see LoginRateLimiter).")
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        return respondWithNewSession(authService.login(request));
+        loginRateLimiter.checkAllowed(request.getUsername());
+        try {
+            User user = authService.login(request);
+            loginRateLimiter.recordSuccess(request.getUsername());
+            return respondWithNewSession(user);
+        } catch (AuthenticationException exception) {
+            loginRateLimiter.recordFailure(request.getUsername());
+            throw exception;
+        }
     }
 
     @Operation(summary = "Exchange the refresh-token cookie for a new access token",

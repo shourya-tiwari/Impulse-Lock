@@ -94,6 +94,16 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void tooManyLoginAttemptsMapsTo429() {
+        ResponseEntity<ErrorResponse> response = handler.handleTooManyLoginAttempts(
+                new TooManyLoginAttemptsException("Too many failed login attempts. Try again in a few minutes."),
+                request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(response.getBody().getMessage()).isEqualTo("Too many failed login attempts. Try again in a few minutes.");
+    }
+
+    @Test
     void jwtExceptionMapsTo401() {
         ResponseEntity<ErrorResponse> response =
                 handler.handleJwtException(new JwtException("malformed"), request);

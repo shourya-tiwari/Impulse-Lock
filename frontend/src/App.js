@@ -17,6 +17,17 @@ const TABS = [
   { key: 'preferences', label: 'Preferences' },
 ];
 
+const VIEW_DEFAULTS = {
+  transaction: {
+    title: 'Evaluation result',
+    emptyHint: 'Evaluate a transaction to see decision type, risk score, and explanation.',
+  },
+  preferences: {
+    title: 'Saved preferences',
+    emptyHint: 'Save preferences to store your behavior settings.',
+  },
+};
+
 function UnauthenticatedShell() {
   const [mode, setMode] = useState('login'); // 'login' | 'register'
 
@@ -48,15 +59,20 @@ function AuthenticatedShell() {
   }, []);
 
   const [active, setActive] = useState('dashboard');
-  const [view, setView] = useState({
-    loading: false,
-    error: '',
-    result: null,
-    title: 'Evaluation result',
-    emptyHint: 'Evaluate a transaction to see decision type, risk score, and explanation.',
-  });
+  const [view, setView] = useState({ loading: false, error: '', result: null, ...VIEW_DEFAULTS.transaction });
 
   const tabs = isAdmin ? [...TABS, { key: 'admin', label: 'Admin' }] : TABS;
+
+  // Fixes docs/v1/design-decisions.md item 11 ("tab-switch state bleed"): switching tabs must
+  // clear the previous form's result/error immediately, not just update the title - otherwise a
+  // stale transaction result could briefly appear under the Preferences tab (or vice versa)
+  // until the newly active form is submitted.
+  function switchTab(key) {
+    setActive(key);
+    if (VIEW_DEFAULTS[key]) {
+      setView({ loading: false, error: '', result: null, ...VIEW_DEFAULTS[key] });
+    }
+  }
 
   return (
     <div className="Shell">
@@ -73,7 +89,7 @@ function AuthenticatedShell() {
                 role="tab"
                 aria-selected={active === tab.key}
                 className={`Tab ${active === tab.key ? 'Tab--active' : ''}`}
-                onClick={() => setActive(tab.key)}
+                onClick={() => switchTab(tab.key)}
               >
                 {tab.label}
               </button>
@@ -106,23 +122,11 @@ function AuthenticatedShell() {
           <div>
             {active === 'preferences' ? (
               <UserPreferencesForm
-                onResult={(next) =>
-                  setView({
-                    title: 'Saved preferences',
-                    emptyHint: 'Save preferences to store your behavior settings.',
-                    ...next,
-                  })
-                }
+                onResult={(next) => setView({ ...VIEW_DEFAULTS.preferences, ...next })}
               />
             ) : (
               <TransactionForm
-                onResult={(next) =>
-                  setView({
-                    title: 'Evaluation result',
-                    emptyHint: 'Evaluate a transaction to see decision type, risk score, and explanation.',
-                    ...next,
-                  })
-                }
+                onResult={(next) => setView({ ...VIEW_DEFAULTS.transaction, ...next })}
               />
             )}
           </div>

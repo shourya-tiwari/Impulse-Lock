@@ -53,6 +53,13 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.UNAUTHORIZED, exception.getMessage(), request.getRequestURI());
     }
 
+    /** Thrown by {@link com.impulselock.impulselock.security.LoginRateLimiter}. */
+    @ExceptionHandler(TooManyLoginAttemptsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyLoginAttempts(TooManyLoginAttemptsException exception,
+                                                                     HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), request.getRequestURI());
+    }
+
     /**
      * Covers login failures (bad password, disabled account, etc). Thrown by
      * AuthenticationManager.authenticate() inside AuthService - a normal application code path,

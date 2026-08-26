@@ -1,340 +1,137 @@
-# 🚀 ImpulseLock
+# ImpulseLock
 
-### AI-Inspired Rule-Based Transaction Risk Evaluation System
+Rule-based transaction risk evaluation system. A Spring Boot backend evaluates financial
+transactions against user-defined behavioral preferences and returns a decision (`ALLOW` /
+`DELAY` / `BLOCK`) with a risk score and explanation; a React frontend provides a dashboard,
+transaction history, and (for admins) rule/user/audit-log management. This is V2 — a full rebuild
+of the original demo (see [`docs/v1/`](docs/v1/) for the original design and
+[`docs/v2/`](docs/v2/) for this version's architecture, security design, and roadmap) adding real
+authentication, RBAC, persistence via Spring Data JPA, audit logging, and Docker/CI packaging.
 
----
+## Quickstart (Docker)
 
-## 📌 Overview
-
-**ImpulseLock** is a full-stack application designed to prevent impulsive or risky financial transactions.
-It evaluates transactions in real-time using a **rule-based decision engine** combined with **user-defined behavioral preferences**.
-
-The system analyzes each transaction and returns a decision:
-
-* ✅ **ALLOW** → Safe transaction
-* ⚠️ **DELAY** → Risky, reconsider
-* ❌ **BLOCK** → Dangerous, restrict
-
----
-
-## 🎯 Key Features
-
-### 🧠 Intelligent Decision Engine
-
-* Modular rule-based system
-* Extensible architecture (Strategy Pattern)
-* Dynamic risk scoring
-
-### 👤 User Preference Configuration
-
-* Daily spending limit
-* Night spending restriction
-* Sensitivity level
-* Restricted categories
-
-### 💳 Transaction Evaluation
-
-* Real-time API evaluation
-* Risk scoring + explanation
-* Persistent transaction storage
-
-### 🌐 Full-Stack System
-
-* Backend: Spring Boot (Java)
-* Frontend: React.js
-* Database: MySQL
-
----
-
-## 🏗️ Project Architecture
-
-```
-ImpulseLock/
-├── src/main/java/com/impulselock/impulselock/
-│   ├── controller/     # REST APIs
-│   ├── service/        # Business logic
-│   ├── engine/         # Decision Engine
-│   ├── rules/          # Rule implementations
-│   ├── repository/     # JDBC database layer
-│   ├── model/          # Core data models
-│   ├── config/         # Bean & CORS configuration
-│   ├── exception/      # Error handling
-│   └── dto/            # Request/response objects
-│
-├── frontend/           # React UI
-│
-├── pom.xml             # Maven config
-└── README.md
-```
-
----
-
-## ⚙️ How It Works
-
-### 🔄 Flow
-
-1. User sets preferences
-2. User initiates transaction
-3. Backend fetches user profile
-4. DecisionEngine evaluates rules
-5. Risk score is calculated
-6. Decision is returned
-
----
-
-## 🧠 Decision Logic
-
-The system evaluates transactions using multiple rules:
-
-* 💰 **HighAmountRule** → Checks daily limit
-* 🌙 **NightSpendingRule** → Restricts night usage
-* ⚡ **FrequentTransactionRule** → Detects rapid activity
-* 🛑 **CategoryRestrictionRule** → Blocks restricted categories
-* 🎚️ **SensitivityLevelRule** → Adjusts strictness
-
----
-
-## 🛠️ Tech Stack
-
-| Layer       | Technology        |
-| ----------- | ----------------- |
-| Backend     | Java, Spring Boot |
-| Frontend    | React.js          |
-| Database    | MySQL             |
-| Build Tool  | Maven             |
-| API Testing | Postman           |
-
----
-
-## 🧪 API Endpoints
-
-### 🔹 Evaluate Transaction
-
-```
-POST /transaction/evaluate
-```
-
-#### Request:
-
-```json
-{
-  "userId": "U101",
-  "amount": 1000,
-  "category": "shopping",
-  "merchant": "Amazon"
-}
-```
-
-#### Response:
-
-```json
-{
-  "decisionType": "BLOCK",
-  "riskScore": 120.0,
-  "explanation": "Transaction exceeds daily limit..."
-}
-```
-
----
-
-### 🔹 Create User (Preferences)
-
-```
-POST /users
-```
-
-#### Request:
-
-```json
-{
-  "userId": "U101",
-  "dailyLimit": 3000,
-  "nightSpendingAllowed": false,
-  "sensitivityLevel": 5
-}
-```
-
----
-
-## 💻 How to Run Locally
-
----
-
-### 🔹 1. Clone Repository
+Requires Docker and Docker Compose.
 
 ```bash
-git clone https://github.com/<your-username>/ImpulseLock.git
+git clone <this-repo-url>
 cd ImpulseLock
+cp .env.example .env
+# edit .env: set MYSQL_ROOT_PASSWORD and JWT_SECRET to real values
+docker compose up --build
 ```
 
----
+This brings up MySQL (with the schema created automatically by Flyway on backend startup), the
+backend on `http://localhost:8080`, and the frontend on `http://localhost:3000`.
 
-### 🔹 2. Setup MySQL Database
+1. Open `http://localhost:3000` and register an account (Register tab) — this always creates a
+   regular `ROLE_USER` account, never an admin (see [security design](docs/v2/security-design.md)).
+2. Set your preferences (daily limit, night spending, sensitivity, restricted categories), then
+   evaluate a transaction and watch the dashboard/history populate.
+3. **To get an admin account** (for the Admin tab: user management, rule-config tuning, audit
+   log): there is no self-service or seeded admin. Register normally, then promote that account
+   directly in the database:
+   ```sql
+   INSERT INTO user_roles (user_id, role_id)
+   SELECT u.id, r.id FROM users u, roles r
+   WHERE u.username = 'your-username' AND r.name = 'ROLE_ADMIN';
+   ```
+   Log out and back in afterward so the new role is reflected in a fresh access token.
 
-Create database:
+Swagger UI (interactive API docs) is available at `http://localhost:8080/swagger-ui.html` in the
+default (non-`prod`) setup.
 
+## API overview
+
+All endpoints are under `/api/v2`. Full request/response shapes: [`docs/v2/api-design.md`](docs/v2/api-design.md); interactive docs via Swagger UI above.
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout` |
+| Users (self) | `GET/PUT /users/me`, `/users/me/preferences`, `/users/me/restricted-categories` |
+| Transactions | `POST /transactions/evaluate`, `GET /transactions/{publicId}`, `/transactions/history`, `/transactions/history/export` |
+| Dashboard | `GET /dashboard/summary`, `/spending-by-category`, `/risk-trend`, `/top-triggered-rules` |
+| Admin (`ROLE_ADMIN`) | `/admin/users`, `/admin/rule-configs`, `/admin/audit-logs` |
+
+Every endpoint except `/auth/**` requires `Authorization: Bearer <accessToken>` from `/auth/login`
+or `/auth/register`; the refresh token travels only as an httpOnly cookie.
+
+## Manual setup (without Docker)
+
+Useful for local development on the app itself (hot reload, debugging).
+
+### 1. Database
 ```sql
 CREATE DATABASE impulselock;
-USE impulselock;
 ```
+Schema is created automatically by Flyway migrations (`src/main/resources/db/migration/`) the
+first time the backend starts — no manual DDL needed.
 
-Create tables:
-
-```sql
-CREATE TABLE users (
-    user_id VARCHAR(50) PRIMARY KEY,
-    daily_limit DOUBLE,
-    night_spending_allowed BOOLEAN,
-    sensitivity_level INT
-);
-
-CREATE TABLE transactions (
-    transaction_id VARCHAR(50) PRIMARY KEY,
-    user_id VARCHAR(50),
-    amount DOUBLE,
-    category VARCHAR(50),
-    merchant VARCHAR(100),
-    timestamp DATETIME
-);
-```
-
----
-
-### 🔹 3. Configure Backend
-
-Edit:
-
-```
-src/main/resources/application.properties
-```
-
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/impulselock
-spring.datasource.username=root
-spring.datasource.password=your_password
-spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
-```
-
----
-
-### 🔹 4. Run Backend
-
+### 2. Backend
+`src/main/resources/application.properties` already defaults to `jdbc:mysql://localhost:3306/impulselock`
+with `root`/`password` and a dev-only JWT secret — override any of these via env vars instead of
+editing the file, if your local MySQL uses different credentials:
 ```bash
-mvn spring-boot:run
+export SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/impulselock
+export SPRING_DATASOURCE_USERNAME=root
+export SPRING_DATASOURCE_PASSWORD=your_password
+export JWT_SECRET=some-long-random-development-secret
 ```
-
-Server runs at:
-
+Then run:
+```bash
+./mvnw spring-boot:run       # mvnw.cmd on native Windows shells
 ```
-http://localhost:8080
-```
+Server runs at `http://localhost:8080`.
 
----
-
-### 🔹 5. Run Frontend
-
+### 3. Frontend
 ```bash
 cd frontend
 npm install
 npm start
 ```
+Runs at `http://localhost:3000`, proxying API calls to `localhost:8080` (see the `"proxy"` field
+in `frontend/package.json`).
 
-Frontend runs at:
-
+### 4. Tests
+```bash
+./mvnw test                              # backend - Testcontainers spins up a real MySQL for repository/integration tests
+cd frontend && npm test -- --watchAll=false
 ```
-http://localhost:3000
-```
 
----
+## Architecture
 
-### 🔹 6. Test Application
+- **Rule engine** (`rules/`, `engine/`): pluggable `SpendingRule` strategy classes, each backed by
+  a DB-configurable weight/enabled flag/params (`rule_configs` table, tunable via the Admin UI
+  without a deploy). `DecisionEngine` sums triggered rules' weights against configurable
+  BLOCK/DELAY thresholds.
+- **Auth**: stateless JWT access tokens (15 min, held in memory on the frontend) + rotating opaque
+  refresh tokens (7 days, httpOnly cookie). See [`docs/v2/security-design.md`](docs/v2/security-design.md).
+- **Persistence**: Spring Data JPA + Hibernate, schema owned by Flyway migrations
+  (`src/main/resources/db/migration/`) — see [`docs/v2/database-design.md`](docs/v2/database-design.md).
+- **Audit logging**: every register/login/preference-change/transaction-evaluation/admin action is
+  recorded to an append-only `audit_log` table, queryable via `/admin/audit-logs`.
+- **Frontend**: plain Create React App (no router, no state library) — tab-based navigation,
+  `AuthContext` for session state, `api.js` for a bearer-token-aware fetch wrapper with automatic
+  401-triggered token refresh.
 
-1. Open frontend
-2. Create user preferences
-3. Evaluate transactions
-4. View decision + risk
+Full documentation: [`docs/v2/architecture.md`](docs/v2/architecture.md),
+[`docs/v2/tasks.md`](docs/v2/tasks.md) (phase-by-phase build log with implementation notes).
 
----
+## Tech stack
 
-## 🎨 UI Features
+| Layer | Technology |
+|---|---|
+| Backend | Java 17, Spring Boot 4, Spring Security, Spring Data JPA, Flyway |
+| Frontend | React 19 (Create React App) |
+| Database | MySQL 8 |
+| Build | Maven |
+| Testing | JUnit 5, Mockito, AssertJ, Testcontainers (backend); React Testing Library, MSW (frontend) |
+| CI/CD | GitHub Actions, Docker, GHCR |
 
-* Dark modern fintech UI
-* Real-time evaluation
-* Color-coded decisions
+## Known limitations
 
-  * 🟢 ALLOW
-  * 🟡 DELAY
-  * 🔴 BLOCK
-
----
-
-## ⚠️ Common Issues & Fixes
-
-### ❌ "Failed to fetch"
-
-✔ Ensure backend is running
-✔ Check correct API URL
-✔ Add CORS configuration
-
----
-
-### ❌ DB connection error
-
-✔ Check MySQL running
-✔ Verify username/password
-
----
-
-### ❌ Port issues
-
-✔ Backend → 8080
-✔ Frontend → 3000
-
----
-
-## 🔮 Future Enhancements
-
-* 🤖 Machine Learning-based risk prediction
-* 📊 Analytics dashboard
-* 📱 Mobile app integration
-* 🔐 Authentication & user accounts
-
----
-
-## 👥 Team Contribution
-
-| Member   | Contribution                       |
-| -------- | ---------------------------------- |
-| Shourya      | Decision Engine, Service, Frontend |
-| Adhya | Controller & API                   |
-| Aditi | Database & Repository              |
-| Rishik | Config & Exception Handling        |
-
----
-
-## 📈 Project Highlights
-
-* Layered architecture
-* Clean separation of concerns
-* Extensible rule engine
-* Full-stack integration
-
----
-
-## 🧠 Key Learning Outcomes
-
-* Spring Boot architecture
-* REST API design
-* JDBC integration
-* React frontend development
-* Git version control
-
----
-
-## 📌 Conclusion
-
-ImpulseLock demonstrates how **rule-based intelligence** can be used to simulate financial decision-making and prevent impulsive behavior in real-world systems.
-
----
-
-## ⭐ If you like this project, give it a star!
+- No seeded/CLI admin provisioning — see the manual SQL step above.
+- No rate limiting beyond `/auth/login`'s brute-force guard (see
+  [`docs/v2/security-design.md`](docs/v2/security-design.md#whats-explicitly-out-of-scope-for-v2)
+  for what's deliberately out of scope).
+- Single-instance deployment shape (no horizontal scaling, no distributed cache) — appropriate at
+  this project's scale; see [`docs/v2/deployment-plan.md`](docs/v2/deployment-plan.md).

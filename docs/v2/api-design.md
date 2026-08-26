@@ -47,16 +47,20 @@ Replaces V1's single all-in-one `POST /users` upsert (which silently overwrote `
 ```json
 {
   "publicId": "b3f1...",
+  "amount": 1000.00,
+  "category": "luxury",
+  "merchant": "Example Store",
+  "occurredAt": "2026-08-26T23:45:00.123",
   "decisionType": "BLOCK",
   "riskScore": 100.00,
-  "explanation": "Transaction exceeds daily limit; Spending attempted during restricted night hours",
+  "explanation": "Transaction exceeds daily limit; Spending attempted during restricted night hours; ",
   "triggeredRules": [
     { "ruleCode": "HIGH_AMOUNT", "weight": 70.0, "message": "Transaction exceeds daily limit" },
     { "ruleCode": "NIGHT_SPENDING", "weight": 40.0, "message": "Spending attempted during restricted night hours" }
-  ],
-  "occurredAt": "2026-08-26T23:45:00.123"
+  ]
 }
 ```
+This exact shape (`TransactionResponseDto`) is reused verbatim for `GET /transactions/{publicId}` and every row of `GET /transactions/history` — one entity, one response DTO, three call sites.
 
 `riskScore` is capped at 100 (see [database-design.md](./database-design.md#transactions) — V1's engine summed weights uncapped, see [v1/rule-engine.md](../v1/rule-engine.md#score-aggregation-caveat)). `triggeredRules` is new — a structured array replacing the need to parse the semicolon-joined `explanation` string V1 returned as the only machine-readable signal.
 
@@ -79,8 +83,8 @@ All dashboard queries are scoped to the authenticated user by default; `ROLE_ADM
 | `GET /admin/users/{id}` | One user's full profile. |
 | `PATCH /admin/users/{id}/status` | Enable/disable an account (sets `users.enabled`). |
 | `GET /admin/rule-configs` | List all `rule_configs` rows (weights, thresholds, enabled flags, params). |
-| `PUT /admin/rule-configs/{ruleCode}` | Update a rule's weight/threshold/enabled/params — this is what makes the previously-hardcoded rule weights and BLOCK/DELAY thresholds configurable (see [database-design.md](./database-design.md#rule_configs)). |
-| `GET /admin/audit-logs` | Paginated, filterable audit trail (by actor, action, date range, entity type). |
+| `PUT /admin/rule-configs/{ruleCode}` | Update one rule's `weight`/`enabled`/`params` — this is what makes the previously-hardcoded per-rule weights configurable (see [database-design.md](./database-design.md#rule_configs)). **Note**: this does not cover the global BLOCK/DELAY `decision_thresholds` row — there is no admin endpoint to view or change those; they can only be edited directly in the database. |
+| `GET /admin/audit-logs` | Paginated, filterable audit trail — by `action` (exact match) and `from`/`to` date range. No `actor`/`entityType` filter params exist on this endpoint as-built. |
 
 ## Error format
 
@@ -109,6 +113,7 @@ All errors share one shape (evolution of V1's `ErrorResponse` — see [v1/error-
 | `403` | Valid JWT, but caller lacks the required role, or accesses another user's resource without `ROLE_ADMIN` |
 | `404` | Referenced resource doesn't exist (or exists but caller has no access — see note below) |
 | `409` | Duplicate `username`/`email` on register, or a DB unique-constraint conflict |
+| `429` | Too many failed `/auth/login` attempts for the same username in a short window (see [security-design.md](./security-design.md#rate-limiting-authlogin)) |
 | `500` | Unexpected server error (message never leaks internals — matches V1's existing generic-catch-all behavior, kept deliberately) |
 
 **Access-control note**: fetching another user's transaction by `publicId` without `ROLE_ADMIN` returns `404`, not `403` — this avoids confirming to an unauthorized caller that a given `publicId` exists at all (a standard information-disclosure precaution; see [security-design.md](./security-design.md)).
@@ -121,4 +126,4 @@ This closes the specific asymmetry noted in [v1/error-handling.md](../v1/error-h
 - `/v3/api-docs` — raw OpenAPI 3 JSON.
 - `/swagger-ui.html` — interactive UI, with a configured `bearerAuth` security scheme so "Authorize" in the UI accepts a real access token and exercises protected endpoints directly.
 
-Grouped by tag matching the sections above (Auth, Users, Transactions, Dashboard, Admin). Enabled in `dev`/`docker` profiles; gated behind `ROLE_ADMIN` (or disabled outright) in `prod` — a public interactive API explorer is a reasonable dev convenience but not something to expose unauthenticated in production.
+Grouped by tag matching the sections above (Auth, Users, Transactions, Dashboard, Admin — audit-log endpoints are tagged Admin too, not a separate tag). Enabled by default (any profile other than `prod`); disabled outright — both `/v3/api-docs` and `/swagger-ui.html` — under the `prod` profile via `spring.config.activate.on-profile=prod` in `application.properties`. There is no role-gated middle ground (e.g. "visible only to `ROLE_ADMIN`") — a public interactive API explorer is a reasonable dev convenience but not something to expose unauthenticated in production, so it's simply off there.
