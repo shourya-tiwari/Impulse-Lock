@@ -6,6 +6,8 @@ import com.impulselock.impulselock.dto.UserProfileResponse;
 import com.impulselock.impulselock.entity.User;
 import com.impulselock.impulselock.security.SecurityUser;
 import com.impulselock.impulselock.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  * docs/v2/api-design.md#userpreferences-endpoints-apiv2users--authenticated. Account creation
  * lives exclusively at {@code POST /api/v2/auth/register} (see AuthController).
  */
+@Tag(name = "Users", description = "The caller's own profile, preferences, and restricted categories - always self, never another user")
 @RestController
 @RequestMapping("/api/v2/users")
 public class UserController {
@@ -40,6 +43,9 @@ public class UserController {
         return ResponseEntity.ok(new UserProfileResponse(userService.getProfile(principal.getUsername())));
     }
 
+    @Operation(summary = "Replace dailyLimit/nightSpendingAllowed/sensitivityLevel",
+            description = "A full replace, not a partial patch - all three fields are required. "
+                    + "Does not touch restricted categories; use the endpoints below for those.")
     @PutMapping("/me/preferences")
     public ResponseEntity<UserProfileResponse> updatePreferences(@AuthenticationPrincipal SecurityUser principal,
                                                                    @Valid @RequestBody UserPreferencesUpdateRequest request) {

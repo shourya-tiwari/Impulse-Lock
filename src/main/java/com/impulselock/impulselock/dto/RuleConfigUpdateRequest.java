@@ -1,5 +1,6 @@
 package com.impulselock.impulselock.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
@@ -12,6 +13,10 @@ public class RuleConfigUpdateRequest {
     private BigDecimal weight;
 
     private boolean enabled;
+
+    @Schema(example = "{\"nightStartHour\": 23, \"nightEndHour\": 6}",
+            description = "Rule-specific tunables - see AdminRuleConfigController.update's javadoc "
+                    + "for which keys each rule_code accepts.")
     private Map<String, Object> params;
 
     public BigDecimal getWeight() {

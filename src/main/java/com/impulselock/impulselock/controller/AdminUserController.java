@@ -5,6 +5,8 @@ import com.impulselock.impulselock.dto.PageResponseDto;
 import com.impulselock.impulselock.dto.UserProfileResponse;
 import com.impulselock.impulselock.entity.User;
 import com.impulselock.impulselock.service.AdminUserService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code SecurityConfig} (added ahead of any admin controller back in Phase 1), so no
  * additional {@code @PreAuthorize} is needed here.
  */
+@Tag(name = "Admin", description = "ROLE_ADMIN only - user management, rule-config tuning, audit log viewing")
 @RestController
 @RequestMapping("/api/v2/admin/users")
 public class AdminUserController {
@@ -44,6 +47,10 @@ public class AdminUserController {
         return ResponseEntity.ok(new UserProfileResponse(adminUserService.findById(id)));
     }
 
+    @Operation(summary = "Enable or disable a user account",
+            description = "Takes effect on the target's very next request with their still-live "
+                    + "access token - JwtAuthenticationFilter re-checks isEnabled() via a fresh DB "
+                    + "lookup every time, not just at login.")
     @PatchMapping("/{id}/status")
     public ResponseEntity<UserProfileResponse> updateStatus(@PathVariable Long id,
                                                              @RequestBody AdminUserStatusUpdateRequest request) {

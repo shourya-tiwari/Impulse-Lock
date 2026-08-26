@@ -9,6 +9,9 @@ import com.impulselock.impulselock.exception.InvalidRefreshTokenException;
 import com.impulselock.impulselock.security.JwtService;
 import com.impulselock.impulselock.security.RefreshTokenService;
 import com.impulselock.impulselock.service.AuthService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +27,14 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * New in Phase 1 - placed directly under {@code /api/v2/auth} (the eventual V2 base path,
  * see docs/v2/api-design.md) since there is no legacy V1 auth endpoint to preserve.
+ *
+ * <p>Every method here clears the global {@code bearerAuth} requirement (see
+ * {@code OpenApiConfig}) - none of these endpoints take an access token; {@code refresh}/
+ * {@code logout} authenticate via the httpOnly refresh-token cookie instead, which isn't
+ * represented as a bearer scheme.
  */
+@Tag(name = "Auth", description = "Registration, login, and JWT/refresh-token lifecycle - see docs/v2/security-design.md")
+@SecurityRequirements
 @RestController
 @RequestMapping("/api/v2/auth")
 public class AuthController {
@@ -47,16 +57,28 @@ public class AuthController {
         this.refreshTokenTtlDays = refreshTokenTtlDays;
     }
 
+    @Operation(summary = "Register a new account",
+            description = "Always assigns ROLE_USER - there is no self-service way to become an "
+                    + "admin (see docs/v2/security-design.md). Returns 409 if the username or email "
+                    + "is already taken. Also sets the refresh-token cookie, like /login.")
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
         return respondWithNewSession(authService.register(request));
     }
 
+    @Operation(summary = "Log in with username and password",
+            description = "Returns 401 with a deliberately generic message for any failure reason "
+                    + "(wrong username, wrong password, or disabled account) to avoid leaking which case applied.")
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return respondWithNewSession(authService.login(request));
     }
 
+    @Operation(summary = "Exchange the refresh-token cookie for a new access token",
+            description = "Not explorable via Swagger UI's \"Try it out\" the normal way - the "
+                    + "refresh token travels only as an httpOnly cookie set by /register or /login, "
+                    + "never as a request parameter. Rotates the refresh token: the previous one is "
+                    + "revoked and cannot be reused.")
     @PostMapping("/refresh")
     public ResponseEntity<AuthResponse> refresh(
             @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String refreshToken) {
@@ -76,6 +98,10 @@ public class AuthController {
                 .body(body);
     }
 
+    @Operation(summary = "Revoke the current refresh token",
+            description = "Clears the refresh-token cookie and revokes it server-side. Does not "
+                    + "invalidate the caller's still-live access token (JWTs are stateless and expire "
+                    + "on their own after app.jwt.access-token-ttl-minutes).")
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
             @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String refreshToken) {
