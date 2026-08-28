@@ -60,22 +60,184 @@ job: build-and-push-images
     account needed beyond the GitHub repo itself)
   - docker build + push for both backend and frontend images, tagged with the git SHA and
     (on a release tag) the semantic version
-job: deploy (optional, environment-dependent)
-  - if a real target host/PaaS is chosen (see "Where this actually runs" below), this job
-    SSHes/uses the platform's CLI to pull the new images and restart the compose stack /
-    redeploy the service. Left as a documented placeholder until a concrete hosting choice
-    is made — see roadmap.md phase 6.
+job: deploy (disabled)
+  - stays `if: false`. Render and Vercel each deploy from their own Git integration, so
+    this job would duplicate them rather than add anything - see "Where this actually
+    runs" below.
 ```
 
 Separating CI (always runs, gates merges) from CD (only runs on `main`/tags, actually ships something) keeps every PR fast and keeps deployment an explicit, reviewable event rather than something that happens on every commit to a feature branch.
 
 ## Where this actually runs
 
-This document intentionally does not commit to a specific cloud provider — the compose-based shape (backend + frontend + MySQL, three containers, no orchestration platform needed) runs identically on a single small VM (e.g. a $5–10/mo droplet/VPS with Docker + Compose installed), a platform with native compose/container support (Railway, Render, Fly.io), or a local machine for demo purposes. The choice is a hosting-cost/convenience decision for whoever runs this, not an architectural one — nothing in the app design assumes a specific provider. If/when a target is chosen, the CD workflow's `deploy` job is filled in against that target; everything upstream of it (images, compose file, migrations) is provider-agnostic already.
+This project deploys to **Render (backend, Docker) + Aiven (MySQL) + Vercel (frontend)**. This is
+the chosen path, not one option among several: earlier revisions of this document deliberately
+stayed provider-agnostic and listed Railway / Fly.io / a generic VPS as equivalent alternatives,
+but as of 2026 neither Railway nor Fly.io has a workable free tier, which removes the premise that
+made the "pick any of these" framing useful. The app itself is still provider-agnostic — nothing
+in the code names a provider, and every provider-specific value below arrives through an
+environment variable — but the *documented* deployment is this one.
+
+| Component | Platform | How it ships |
+|---|---|---|
+| Backend | Render, Docker runtime | Builds the repo-root `Dockerfile` (the same multi-stage build compose uses) |
+| Database | Aiven for MySQL | Managed, TLS-only, external to Render |
+| Frontend | Vercel | CRA static build, with a rewrite proxying `/api/v2/*` to Render |
+
+The three-container compose topology still describes local development exactly. In the deployed
+shape, compose's `mysql` service is replaced by Aiven and its `frontend` nginx container is
+replaced by Vercel's edge — the `backend` container is the only piece that ships as-is.
+
+### Why the frontend proxies instead of calling Render directly
+
+The refresh token is delivered as an httpOnly, `Secure`, **`SameSite=Strict`** cookie scoped to
+`/api/v2/auth` (see [security-design.md](./security-design.md)). `SameSite=Strict` means the
+browser withholds that cookie on any request whose site differs from the page's site — so a
+Vercel-hosted page calling `https://<app>.onrender.com/api/v2/auth/refresh` directly would send no
+cookie, and the silent-refresh flow would fail on every hard page load. Relaxing the cookie to
+`SameSite=None` would fix the symptom while giving up the CSRF protection that `Strict` buys.
+
+`frontend/vercel.json` avoids the trade-off by keeping the browser same-origin:
+
+```json
+{
+  "rewrites": [
+    { "source": "/api/v2/:path*", "destination": "https://REPLACE-WITH-RENDER-URL.onrender.com/api/v2/:path*" }
+  ]
+}
+```
+
+Vercel proxies server-side, so as far as the browser is concerned every API call is a same-origin
+request to the Vercel domain, and the `Strict` cookie is sent normally. This is the same trick
+`frontend/nginx.conf` already plays for compose (`location /api/v2/` → `proxy_pass http://backend:8080/api/v2/`)
+and CRA's `"proxy"` field plays in dev — three deployment shapes, one same-origin strategy.
+
+`frontend/src/api.js` needs no change: `getApiBaseUrl()` returns `''` unless
+`REACT_APP_API_BASE_URL` is set, so it already emits relative `/api/v2/...` URLs that the rewrite
+picks up. **Do not set `REACT_APP_API_BASE_URL` on Vercel** — doing so switches the client to
+absolute cross-origin URLs and reintroduces the exact cookie problem the rewrite exists to avoid.
+
+### Render environment variables
+
+Set these in the Render dashboard (Service → Environment). The order below is the order to fill
+them in; the first six are required and the service will not work correctly without them.
+
+| # | Variable | Value / format |
+|---|---|---|
+| 1 | `SPRING_DATASOURCE_URL` | `jdbc:mysql://<aiven-host>:<port>/impulselock?sslMode=REQUIRED` — host and port from Aiven's service overview. The `?sslMode=REQUIRED` suffix is **not optional**; see "Aiven TLS" below. |
+| 2 | `SPRING_DATASOURCE_USERNAME` | Aiven's generated user — `avnadmin` unless you created another |
+| 3 | `SPRING_DATASOURCE_PASSWORD` | From Aiven's service overview. Mark it secret in Render. |
+| 4 | `JWT_SECRET` | **A real random value — never the committed dev default.** Minimum 32 characters (see below). Generate with `openssl rand -base64 48`. Mark it secret. |
+| 5 | `APP_CORS_ALLOWED_ORIGINS` | Your Vercel origin, scheme included, **no trailing slash**: `https://<project>.vercel.app`. Comma-separated if more than one. |
+| 6 | `SPRING_PROFILES_ACTIVE` | `prod` — activates the profile block that disables Swagger UI and the OpenAPI endpoint |
+| 7 | `JWT_ACCESS_TOKEN_TTL_MINUTES` | Optional, defaults to `15` |
+| 8 | `JWT_REFRESH_TOKEN_TTL_DAYS` | Optional, defaults to `7` |
+| 9 | `LOGIN_RATE_LIMIT_MAX_ATTEMPTS` | Optional, defaults to `5` |
+| 10 | `LOGIN_RATE_LIMIT_WINDOW_MINUTES` | Optional, defaults to `15` |
+
+Deliberately **not** in that list:
+
+- `PORT` — Render injects it. `application.properties` binds `server.port=${PORT:8080}` so the app
+  follows whatever Render assigns, falling back to 8080 locally. Do not set it by hand.
+- `MYSQL_ROOT_PASSWORD` — compose-only, for the local `mysql` container. Aiven has no equivalent.
+
+**On `JWT_SECRET` specifically**: `JwtService` builds its signing key with
+`Keys.hmacShaKeyFor(secret.getBytes(UTF_8))`, and jjwt rejects anything under 256 bits for HS256 —
+so the value must be **at least 32 characters**, used raw (it is not base64-decoded first). A
+shorter secret fails at startup with `WeakKeyException` rather than silently weakening anything.
+The default in `application.properties` is committed and therefore public: it is for local dev
+only, and shipping it to Render would let anyone mint valid access tokens.
+
+**On `APP_CORS_ALLOWED_ORIGINS` and the rewrite**: with the Vercel rewrite in place, browser
+traffic is same-origin and never triggers a CORS preflight, so this variable is not what makes the
+app work day to day. It still matters — `CorsConfig` sets `allowCredentials(true)`, and Spring
+rejects a wildcard origin in that mode — so set it correctly rather than leaving it at the
+`localhost:3000` default, which would block any direct browser call to the Render URL.
+
+### Swapping in the real Render URL
+
+Render assigns the URL only after the first successful deploy, so the placeholder ships first:
+
+1. Deploy the backend on Render, then copy the assigned URL (`https://<name>.onrender.com`).
+2. Edit **`frontend/vercel.json`** — the `"destination"` field, the only line in the repo that
+   carries the Render URL. Replace **only** the host `REPLACE-WITH-RENDER-URL.onrender.com`,
+   keeping the `https://` prefix and the `/api/v2/:path*` suffix intact.
+3. Commit and push — Vercel redeploys on push and the rewrite takes effect.
+4. Set `APP_CORS_ALLOWED_ORIGINS` on Render to the Vercel URL, which by then is also known.
+
+Steps 2 and 4 are a genuine chicken-and-egg: each platform needs the other's URL, so the first
+deploy of each is expected to be non-functional end-to-end until both are filled in.
+
+### CD workflow
+
+`.github/workflows/cd.yml` builds and pushes both images to GHCR on every push to `main`; its
+`deploy` job stays disabled (`if: false`). Render and Vercel each deploy from their own Git
+integration, so a third deploy path in Actions would duplicate them rather than add anything. The
+SHA-tagged GHCR images remain useful for the rollback story below and for running the compose
+stack anywhere else.
 
 ## Database migrations in deployment
 
-Flyway runs automatically on backend container startup (`spring.flyway.enabled=true`, baked into the default Spring Boot + Flyway integration) — no manual `CREATE TABLE` step by an operator, which is a direct fix for V1's fully-manual, under-documented schema setup (see [v1/database.md](../v1/database.md#schema-code-mismatch-restricted_categories)). A failed migration fails the container's startup loudly rather than the app booting against a mismatched schema.
+Flyway runs automatically on backend container startup (`spring.flyway.enabled=true`, baked into
+the default Spring Boot + Flyway integration) — no manual `CREATE TABLE` step by an operator,
+which is a direct fix for V1's fully-manual, under-documented schema setup (see
+[v1/database.md](../v1/database.md#schema-code-mismatch-restricted_categories)). A failed
+migration fails the container's startup loudly rather than the app booting against a mismatched
+schema — reinforced by `spring.jpa.hibernate.ddl-auto=validate`, which independently fails startup
+if the migrated schema and the JPA entities disagree.
+
+### Against a fresh Aiven database
+
+`V1`–`V5` run against Aiven exactly as they do against the compose `mysql:8.0` container. Nothing
+in them needs elevated privileges: they are plain `CREATE TABLE` / `ALTER TABLE` / `INSERT` /
+`UPDATE` with `CHECK` constraints, `JSON` columns and `DATETIME(3)` — no stored procedures, no
+functions, no triggers, no `DEFINER` clauses, no `SET GLOBAL`, no `CREATE DATABASE`. That matters
+because those are precisely the constructs a shared-tier managed MySQL withholds: Aiven's
+`avnadmin` is not `SUPER`, so a migration defining a trigger or stored routine would fail against
+`log_bin_trust_function_creators` with binary logging enabled. None of this project's migrations
+touch that surface, so the shared tier is not a constraint here.
+
+Aiven-specific things that *can* trip up the first deploy:
+
+- **The database must already exist.** Flyway creates tables, not schemas, and the JDBC URL has to
+  connect to a database that is already there. Aiven provisions a service with `defaultdb` only —
+  create `impulselock` from the Aiven console (Databases tab) before the first Render deploy, or
+  point `SPRING_DATASOURCE_URL` at `defaultdb` instead. A URL naming a non-existent database fails
+  at connection time with `Unknown database`, before Flyway is ever reached.
+- **The schema must be empty on first run.** Flyway refuses a non-empty schema that has no
+  `flyway_schema_history` table (`Found non-empty schema ... without schema history table`). Use a
+  clean database, not one you have already hand-created tables in.
+- **TLS is mandatory** — see below. This surfaces as a connection failure, not a migration failure.
+- **Connection ceiling.** Shared-tier Aiven plans cap concurrent connections (roughly 20–25 on the
+  smallest ones). HikariCP's default maximum pool size is 10, which fits comfortably for a single
+  Render instance, but is worth remembering before scaling to more than one.
+- **Render free-tier spin-down.** An idle free service is stopped and cold-starts on the next
+  request. Flyway re-runs on every start, but after the first deploy it only reads
+  `flyway_schema_history` and finds nothing to apply — that costs a checksum validation, not a
+  re-migration.
+
+### Aiven TLS
+
+Aiven refuses non-TLS MySQL connections. mysql-connector-j (9.7.0 here, version managed by the
+Spring Boot parent) defaults to `sslMode=PREFERRED`, which does negotiate TLS when the server
+offers it — but `PREFERRED` also *silently falls back to an unencrypted connection* if the
+handshake fails, which is the wrong failure mode for a database reached over the public internet.
+Appending **`?sslMode=REQUIRED`** to `SPRING_DATASOURCE_URL` makes a failed handshake an error
+instead.
+
+Use `sslMode`, not the older spelling. The driver still accepts `useSSL=true&requireSSL=true` and
+translates that exact pair to `sslMode=REQUIRED`, but its own bundled property documentation marks
+`useSSL` / `requireSSL` / `verifyServerCertificate` as **deprecated**, and it ignores all three
+whenever `sslMode` is set explicitly — so mixing the two spellings is at best redundant and at
+worst misleading to the next reader.
+
+`REQUIRED` encrypts without validating the server certificate against a CA. `VERIFY_CA` and
+`VERIFY_IDENTITY` add that validation but require Aiven's CA certificate loaded into a Java
+truststore on the Render instance, a meaningfully larger setup step; `REQUIRED` is the
+proportionate choice at this project's scale and is what Aiven's own quick-start documents.
+
+The hostname never enters the repo — it arrives only through `SPRING_DATASOURCE_URL`, matching how
+the username and password already work.
 
 ## Observability in deployment
 
