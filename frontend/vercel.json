@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/v2/:path*",
+      "destination": "https://impulse-lock.onrender.com/api/v2/:path*"
+    }
+  ]
+}
