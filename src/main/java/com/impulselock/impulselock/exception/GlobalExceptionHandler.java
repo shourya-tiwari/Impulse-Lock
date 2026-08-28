@@ -9,10 +9,13 @@ import jakarta.validation.ConstraintViolationException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -23,6 +26,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleUserNotFound(UserNotFoundException exception,
@@ -155,8 +160,33 @@ public class GlobalExceptionHandler {
         return buildErrorResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI());
     }
 
+    /**
+     * A syntactically invalid or unparseable request body - the same problem
+     * {@link #handleNoResourceFound} solves one level up. Without this it reached the generic
+     * handler below and reported a caller's malformed JSON as "Unexpected server error" with a 500,
+     * blaming the server for a request it was right to reject. The exception message is not echoed
+     * back: Jackson's parse errors quote the offending payload and name internal DTO classes.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException exception,
+                                                               HttpServletRequest request) {
+        return buildErrorResponse(HttpStatus.BAD_REQUEST, "Malformed or unreadable request body",
+                request.getRequestURI());
+    }
+
+    /**
+     * The catch-all. The response body stays deliberately vague ("Unexpected server error") so an
+     * internal failure never leaks class names, SQL, or stack frames to the caller - but the
+     * exception MUST be logged here with its stack trace, because this handler is the last thing
+     * that sees it. Without this log line an unexpected 500 is completely invisible server-side:
+     * the client gets an opaque message and the logs show nothing at all, leaving the correlation
+     * ID in the response as the only thread back to a failure whose cause was never recorded.
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneric(Exception exception, HttpServletRequest request) {
+        log.error("Unhandled exception for {} {} (correlationId={})",
+                request.getMethod(), request.getRequestURI(), MDC.get(CorrelationIdFilter.MDC_KEY),
+                exception);
         return buildErrorResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Unexpected server error",
