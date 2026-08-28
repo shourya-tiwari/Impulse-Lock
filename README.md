@@ -8,6 +8,19 @@
 ![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?logo=mysql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/Live%20demo-impulse--lock.vercel.app-000000?logo=vercel&logoColor=white)](https://impulse-lock.vercel.app/)
+
+### ▶ Live demo — <https://impulse-lock.vercel.app/>
+
+React frontend on **Vercel**, Spring Boot API on **Render**, MySQL on **Aiven**. Register an
+account and evaluate a transaction — the whole flow (auth, rule engine, dashboard, history, CSV
+export) runs against real infrastructure, not a mock or a recording.
+
+> **First request may take ~50s.** Everything is on free tiers, so the Render backend sleeps after
+> inactivity and cold-starts on the next request. If the first login seems to hang, that is the
+> cold start, not a failure — subsequent requests are fast.
+
+---
 
 **ImpulseLock** is a JWT-authenticated, rule-based transaction risk evaluation system. A Spring
 Boot backend evaluates financial transactions against each user's own behavioral preferences —
@@ -42,6 +55,7 @@ document in that folder, cross-referenced throughout.
 - [Security model](#security-model)
 - [Testing](#testing)
 - [CI/CD](#cicd)
+- [Deployment](#deployment)
 - [Project structure](#project-structure)
 - [Known limitations](#known-limitations)
 - [Documentation index](#documentation-index)
@@ -298,7 +312,7 @@ committed as the authoritative template; copy it to `.env` (git-ignored) for Doc
 | Variable | Default (local dev) | Purpose |
 |---|---|---|
 | `MYSQL_ROOT_PASSWORD` | — (required, no default) | MySQL root password, shared by the `mysql` and `backend` services. |
-| `SPRING_DATASOURCE_URL` | `jdbc:mysql://localhost:3306/impulselock` | JDBC connection string (Compose overrides the host to the `mysql` service name). |
+| `SPRING_DATASOURCE_URL` | `jdbc:mysql://localhost:3306/impulselock` | JDBC connection string (Compose overrides the host to the `mysql` service name). Append `?sslMode=REQUIRED` against any managed/remote MySQL — the driver default (`PREFERRED`) silently downgrades to plaintext on a failed TLS handshake. |
 | `SPRING_DATASOURCE_USERNAME` | `root` | Database user. |
 | `SPRING_DATASOURCE_PASSWORD` | `password` | Database password. |
 | `JWT_SECRET` | dev-only placeholder (committed, **must** be overridden outside local dev) | HS256 signing secret for access tokens. |
@@ -307,6 +321,8 @@ committed as the authoritative template; copy it to `.env` (git-ignored) for Doc
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Comma-separated list of allowed CORS origins. |
 | `LOGIN_RATE_LIMIT_MAX_ATTEMPTS` | `5` | Failed `/auth/login` attempts allowed per window, per username. |
 | `LOGIN_RATE_LIMIT_WINDOW_MINUTES` | `15` | Rate-limit window size. |
+| `SPRING_PROFILES_ACTIVE` | none (dev behavior) | `docker` inside Compose, `prod` when deployed. `prod` switches logging to JSON and disables Swagger UI and `/v3/api-docs`. |
+| `PORT` | `8080` | Bind port. Injected automatically by most container hosts (Render, Fly, Cloud Run); `server.port=${PORT:8080}` picks it up, so set it only if you need a specific local port. |
 
 ## API reference
 
@@ -480,8 +496,65 @@ Two independent GitHub Actions workflows:
 docker compose up --build     # exactly what CD packages, runnable locally
 ```
 
-Step-by-step deployment runbook: [`DEPLOYMENT.md`](DEPLOYMENT.md).
 Full CI/CD and hosting rationale: [`docs/v2/deployment-plan.md`](docs/v2/deployment-plan.md).
+
+## Deployment
+
+The live instance at **<https://impulse-lock.vercel.app/>** runs on three managed services, each
+chosen for the part of the stack it fits, all on free tiers:
+
+| Component | Platform | Notes |
+|---|---|---|
+| Frontend | **Vercel** | CRA production build served from Vercel's edge, plus an `/api/v2/*` rewrite (see below) |
+| Backend | **Render** | The repo-root `Dockerfile` — the same multi-stage image Compose builds locally |
+| Database | **Aiven for MySQL** | Managed MySQL 8, TLS-only, schema created by Flyway on first boot |
+
+Both platforms deploy straight from `main` on push, which is why `cd.yml`'s `deploy` job stays
+disabled — it would only duplicate them. The GHCR images it publishes remain the artifact for
+running this stack anywhere else.
+
+### The one non-obvious piece: the frontend proxies the API
+
+The refresh token is an `httpOnly`, `Secure`, **`SameSite=Strict`** cookie. `SameSite=Strict` means
+the browser withholds it on any request to a *different site* — so a Vercel-hosted page calling
+`*.onrender.com` directly would send no cookie at all. Login would appear to succeed, then every
+user would be silently logged out the moment their 15-minute access token expired, because the
+silent-refresh call could never authenticate. Relaxing the cookie to `SameSite=None` would fix the
+symptom while discarding the CSRF protection `Strict` provides.
+
+Instead, `frontend/vercel.json` rewrites `/api/v2/*` to the Render backend server-side, so the
+browser only ever issues same-origin requests and the `Strict` cookie is sent normally:
+
+```json
+{ "rewrites": [ { "source": "/api/v2/:path*", "destination": "https://<backend>.onrender.com/api/v2/:path*" } ] }
+```
+
+This is the same approach `frontend/nginx.conf` takes for Compose (`proxy_pass` to the `backend`
+service) and CRA's `"proxy"` field takes in dev — three deployment shapes, one same-origin
+strategy, and `src/api.js` needs no environment-specific branching in any of them.
+
+### Deploying your own instance
+
+Prerequisites: the database must exist before first boot (Flyway creates *tables*, not *schemas*),
+and the JDBC URL needs `?sslMode=REQUIRED` — Aiven refuses plaintext connections, and
+mysql-connector-j's default `sslMode=PREFERRED` would silently downgrade rather than fail.
+
+```
+SPRING_DATASOURCE_URL       jdbc:mysql://<host>:<port>/impulselock?sslMode=REQUIRED
+SPRING_DATASOURCE_USERNAME  <db user>
+SPRING_DATASOURCE_PASSWORD  <db password>          # secret
+JWT_SECRET                  openssl rand -base64 48 # secret; >=32 chars or startup fails
+APP_CORS_ALLOWED_ORIGINS    https://<your-frontend>  # no trailing slash
+SPRING_PROFILES_ACTIVE      prod                     # disables Swagger UI and /v3/api-docs
+```
+
+Set the frontend's root directory to `frontend`, leave `REACT_APP_API_BASE_URL` **unset** so the
+client keeps emitting relative URLs the rewrite can intercept, and point the rewrite's
+`destination` at your backend. `PORT` is injected by the host — `server.port=${PORT:8080}` picks it
+up automatically and falls back to 8080 locally.
+
+Full environment/provider walkthrough, including Flyway-on-managed-MySQL caveats and rollback:
+[`docs/v2/deployment-plan.md`](docs/v2/deployment-plan.md).
 
 ## Project structure
 
@@ -531,7 +604,6 @@ Impulse-Lock/
 
 | Document | Covers |
 |---|---|
-| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Step-by-step runbook for deploying to Aiven + Render + Vercel |
 | [`docs/v2/architecture.md`](docs/v2/architecture.md) | System overview, package structure, request flow, cross-cutting concerns |
 | [`docs/v2/security-design.md`](docs/v2/security-design.md) | Full JWT/RBAC/rate-limiting threat model and design |
 | [`docs/v2/database-design.md`](docs/v2/database-design.md) | Column-level schema, indexes, migration history |

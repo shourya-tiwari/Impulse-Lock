@@ -1,4 +1,7 @@
 HELP.md
+# Personal deployment runbook - kept local, not published (see docs/v2/deployment-plan.md
+# for the committed deployment design).
+DEPLOYMENT.md
 target/
 !**/src/main/**/target/
 !**/src/test/**/target/
