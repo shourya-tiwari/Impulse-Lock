@@ -1,6 +1,7 @@
 import './App.css';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AuthProvider, useAuth } from './auth/AuthContext';
+import { DataCacheProvider, useDataCache } from './data/DataCache';
 import ResultCard from './components/ResultCard';
 import TransactionForm from './components/TransactionForm';
 import UserPreferencesForm from './components/UserPreferencesForm';
@@ -55,7 +56,15 @@ function AuthenticatedShell() {
   const apiHint = useMemo(() => {
     const base = process.env.REACT_APP_API_BASE_URL;
     if (base) return base;
-    return 'Using CRA proxy → http://localhost:8080';
+    // With no absolute base URL the client issues relative /api/v2/... requests, which something
+    // in front of it proxies to the backend: CRA's dev-server "proxy" field under `npm start`,
+    // frontend/nginx.conf under Docker Compose, and frontend/vercel.json's rewrite on Vercel. In
+    // all three the browser is talking to its own origin, so the old "→ http://localhost:8080"
+    // text was wrong everywhere except local development - and actively misleading in production,
+    // where it implied the deployed app was calling a machine-local backend.
+    return process.env.NODE_ENV === 'development'
+      ? 'Using same-origin API (CRA proxy → localhost:8080)'
+      : 'Using same-origin API';
   }, []);
 
   const [active, setActive] = useState('dashboard');
@@ -145,7 +154,20 @@ function AuthenticatedShell() {
 }
 
 function AppShell() {
-  const { isInitializing, isAuthenticated } = useAuth();
+  const { isInitializing, isAuthenticated, user } = useAuth();
+  const { clear } = useDataCache();
+
+  // Drop every cached payload when the signed-in identity changes - logging out, or a different
+  // account signing in on the same tab without a page reload. Without this the next user would
+  // briefly see the previous user's dashboard and history before their own data arrived.
+  const previousUserId = useRef(user?.id ?? null);
+  useEffect(() => {
+    const currentUserId = user?.id ?? null;
+    if (previousUserId.current !== currentUserId) {
+      clear();
+      previousUserId.current = currentUserId;
+    }
+  }, [user, clear]);
 
   if (isInitializing) {
     return (
@@ -169,7 +191,9 @@ function App() {
   return (
     <div className="App">
       <AuthProvider>
-        <AppShell />
+        <DataCacheProvider>
+          <AppShell />
+        </DataCacheProvider>
       </AuthProvider>
     </div>
   );

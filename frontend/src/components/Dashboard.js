@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { getJson } from '../api';
+import { useCachedResource } from '../data/DataCache';
 
 function BarList({ items, labelKey, valueKey, countKey, formatValue }) {
   const max = Math.max(1, ...items.map((i) => Number(i[valueKey]) || 0));
@@ -58,37 +59,21 @@ function RiskTrendChart({ points }) {
 }
 
 export default function Dashboard() {
-  const [state, setState] = useState({ loading: true, error: '', data: null });
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [summary, byCategory, riskTrend, topRules] = await Promise.all([
-          getJson('/api/v2/dashboard/summary'),
-          getJson('/api/v2/dashboard/spending-by-category'),
-          getJson('/api/v2/dashboard/risk-trend'),
-          getJson('/api/v2/dashboard/top-triggered-rules'),
-        ]);
-        if (!cancelled) {
-          setState({ loading: false, error: '', data: { summary, byCategory, riskTrend, topRules } });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setState({
-            loading: false,
-            error: err instanceof Error ? err.message : 'Failed to load dashboard.',
-            data: null,
-          });
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const fetchDashboard = useCallback(async () => {
+    const [summary, byCategory, riskTrend, topRules] = await Promise.all([
+      getJson('/api/v2/dashboard/summary'),
+      getJson('/api/v2/dashboard/spending-by-category'),
+      getJson('/api/v2/dashboard/risk-trend'),
+      getJson('/api/v2/dashboard/top-triggered-rules'),
+    ]);
+    return { summary, byCategory, riskTrend, topRules };
   }, []);
 
-  if (state.loading) {
+  const { loading, refreshing, error, data } = useCachedResource('dashboard', fetchDashboard);
+
+  // Only the very first load blanks the card. Every later visit to this tab renders the cached
+  // dashboard immediately and revalidates behind it (see data/DataCache.js).
+  if (loading) {
     return (
       <div className="Card">
         <div className="CardTitle">Dashboard</div>
@@ -100,21 +85,27 @@ export default function Dashboard() {
     );
   }
 
-  if (state.error) {
+  // Only reachable when the first load itself failed - a failed refresh keeps the last good data
+  // on screen and reports itself through the inline notice below instead.
+  if (error && !data) {
     return (
       <div className="Card">
         <div className="CardTitle">Dashboard</div>
-        <div className="Alert">{state.error}</div>
+        <div className="Alert">{error}</div>
       </div>
     );
   }
 
-  const { summary, byCategory, riskTrend, topRules } = state.data;
+  const { summary, byCategory, riskTrend, topRules } = data;
 
   return (
     <div className="DashboardGrid">
+      {error ? <div className="Alert">Could not refresh: {error} Showing last loaded data.</div> : null}
       <div className="Card">
-        <div className="CardTitle">Summary (last 30 days)</div>
+        <div className="CardTitle">
+          Summary (last 30 days)
+          {refreshing ? <span className="RefreshHint" aria-live="polite"> · refreshing…</span> : null}
+        </div>
         <div className="StatGrid">
           <div className="Stat">
             <div className="StatLabel">Transactions</div>

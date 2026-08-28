@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { downloadFile, getJson } from '../api';
+import { useCachedResource } from '../data/DataCache';
 
 const DEFAULT_FILTERS = {
   from: '',
@@ -27,7 +28,6 @@ export default function TransactionHistory() {
   const [appliedFilters, setAppliedFilters] = useState(DEFAULT_FILTERS);
   const [page, setPage] = useState(0);
   const [sort, setSort] = useState({ field: 'occurredAt', direction: 'DESC' });
-  const [state, setState] = useState({ loading: true, error: '', data: null });
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
 
@@ -43,32 +43,24 @@ export default function TransactionHistory() {
     };
   }, [appliedFilters]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setState((s) => ({ ...s, loading: true, error: '' }));
-    (async () => {
-      try {
-        const data = await getJson('/api/v2/transactions/history', {
-          ...buildQuery(),
-          page,
-          size: PAGE_SIZE,
-          sort: `${sort.field},${sort.direction}`,
-        });
-        if (!cancelled) setState({ loading: false, error: '', data });
-      } catch (err) {
-        if (!cancelled) {
-          setState({
-            loading: false,
-            error: err instanceof Error ? err.message : 'Failed to load history.',
-            data: null,
-          });
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [buildQuery, page, sort]);
+  const sortParam = `${sort.field},${sort.direction}`;
+
+  // The key has to carry every input the request varies on. Caching only on "history" would serve
+  // page 1 of an unfiltered list as though it were page 3 of a filtered one.
+  const cacheKey = `history:${JSON.stringify(appliedFilters)}:${page}:${sortParam}`;
+
+  const fetchHistory = useCallback(
+    () =>
+      getJson('/api/v2/transactions/history', {
+        ...buildQuery(),
+        page,
+        size: PAGE_SIZE,
+        sort: sortParam,
+      }),
+    [buildQuery, page, sortParam]
+  );
+
+  const { loading, refreshing, error, data } = useCachedResource(cacheKey, fetchHistory);
 
   function updateFilter(key) {
     return (e) => setFilters((p) => ({ ...p, [key]: e.target.value }));
@@ -171,17 +163,25 @@ export default function TransactionHistory() {
       </div>
       {exportError ? <div className="Alert">{exportError}</div> : null}
 
-      {state.loading ? (
+      {/* Only a genuine first load (nothing cached) blanks the list. Changing page/sort/filters
+          re-renders the previously loaded page until the new one arrives, rather than flashing an
+          empty card - see data/DataCache.js. */}
+      {loading ? (
         <div className="Inline">
           <div className="Spinner" aria-label="Loading" />
           <div className="Empty">Loading transactions…</div>
         </div>
       ) : null}
 
-      {!state.loading && state.error ? <div className="Alert">{state.error}</div> : null}
+      {refreshing && data ? <div className="Hint" aria-live="polite">Refreshing…</div> : null}
 
-      {!state.loading && !state.error && state.data ? (
-        state.data.content.length === 0 ? (
+      {error && !data ? <div className="Alert">{error}</div> : null}
+      {error && data ? (
+        <div className="Alert">Could not refresh: {error} Showing last loaded results.</div>
+      ) : null}
+
+      {!loading && data ? (
+        data.content.length === 0 ? (
           <div className="Empty">No transactions match these filters.</div>
         ) : (
           <>
@@ -204,7 +204,7 @@ export default function TransactionHistory() {
                   </tr>
                 </thead>
                 <tbody>
-                  {state.data.content.map((tx) => (
+                  {data.content.map((tx) => (
                     <tr key={tx.publicId}>
                       <td>{new Date(tx.occurredAt).toLocaleString()}</td>
                       <td>{Number(tx.amount).toFixed(2)}</td>
@@ -232,12 +232,12 @@ export default function TransactionHistory() {
                 Previous
               </button>
               <div className="Hint">
-                Page {state.data.page + 1} of {Math.max(1, state.data.totalPages)} ({state.data.totalElements} total)
+                Page {data.page + 1} of {Math.max(1, data.totalPages)} ({data.totalElements} total)
               </div>
               <button
                 type="button"
                 className="Button Button--secondary"
-                disabled={page + 1 >= state.data.totalPages}
+                disabled={page + 1 >= data.totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
                 Next
