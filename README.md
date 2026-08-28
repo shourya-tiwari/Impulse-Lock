@@ -473,13 +473,14 @@ Two independent GitHub Actions workflows:
   The two jobs run in parallel; either failing blocks the merge.
 - **`cd.yml`** — runs on push to `main` and on version tags. Builds and pushes both the backend and
   frontend Docker images to **GitHub Container Registry (GHCR)**, tagged by commit SHA and (on a
-  release tag) semantic version. A `deploy` job is a documented placeholder until a specific
-  hosting target is chosen — the images/Compose file/migrations are already provider-agnostic.
+  release tag) semantic version. Its `deploy` job stays disabled (`if: false`) — Render and Vercel
+  each deploy from their own Git integration, so a third path here would duplicate them.
 
 ```bash
 docker compose up --build     # exactly what CD packages, runnable locally
 ```
 
+Step-by-step deployment runbook: [`DEPLOYMENT.md`](DEPLOYMENT.md).
 Full CI/CD and hosting rationale: [`docs/v2/deployment-plan.md`](docs/v2/deployment-plan.md).
 
 ## Project structure
@@ -530,6 +531,7 @@ Impulse-Lock/
 
 | Document | Covers |
 |---|---|
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Step-by-step runbook for deploying to Aiven + Render + Vercel |
 | [`docs/v2/architecture.md`](docs/v2/architecture.md) | System overview, package structure, request flow, cross-cutting concerns |
 | [`docs/v2/security-design.md`](docs/v2/security-design.md) | Full JWT/RBAC/rate-limiting threat model and design |
 | [`docs/v2/database-design.md`](docs/v2/database-design.md) | Column-level schema, indexes, migration history |
