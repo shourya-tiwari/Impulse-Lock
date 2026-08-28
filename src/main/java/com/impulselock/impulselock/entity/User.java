@@ -65,7 +65,26 @@ public class User {
             inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    /**
+     * EAGER deliberately, matching {@link #roles} above and for the same reason: essentially every
+     * path that loads a User immediately needs this collection. {@code UserProfileResponse} reads
+     * it for every user-facing response (login, refresh, /users/me, preferences, the admin user
+     * list), and {@code CategoryRestrictionRule} reads it on every transaction evaluation.
+     *
+     * <p>It was LAZY, which threw {@code LazyInitializationException} on all of those paths:
+     * {@code spring.jpa.open-in-view=false} (correctly) closes the persistence session when the
+     * service's {@code @Transactional} boundary ends, but the DTOs are constructed afterwards in
+     * the controller layer, so touching the collection there had no session to initialize from.
+     * Registration masked the bug - a just-built entity carries an already-initialized collection,
+     * so only entities re-loaded from the database (i.e. every subsequent request) actually failed.
+     *
+     * <p>Fetching eagerly here fixes all four load paths at once - {@code findByUsername},
+     * {@code findById}, the paginated {@code findAll}, and the LAZY {@code RefreshToken.user}
+     * traversed by /auth/refresh - rather than requiring an {@code @EntityGraph} on each finder,
+     * which the next finder added would silently miss. The collection is a handful of rows per
+     * user, so the cost is negligible at this scale.
+     */
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<RestrictedCategory> restrictedCategories = new ArrayList<>();
 
     @CreatedDate
