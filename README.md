@@ -17,7 +17,10 @@ export) runs against real infrastructure, not a mock or a recording.
 
 > **First request may take ~50s.** Everything is on free tiers, so the Render backend sleeps after
 > inactivity and cold-starts on the next request. If the first login seems to hang, that is the
-> cold start, not a failure — subsequent requests are fast.
+> cold start, not a failure — subsequent requests are fast. The client allows for this rather than
+> making you discover it: whenever the backend may be asleep, `api.js` waits out a full cold boot
+> instead of the usual 15s, and if even that runs out it says the server is waking up rather than
+> reporting a generic timeout (see [Cold starts](#cold-starts-and-the-client-timeout)).
 
 ---
 
@@ -523,6 +526,32 @@ chosen for the part of the stack it fits, all on free tiers:
 Both platforms deploy straight from `main` on push — that is the whole deploy mechanism, and the
 only one. GitHub Actions runs tests and stops there. To run this stack anywhere else, build the
 images from the committed `Dockerfile`s (`docker compose up --build`).
+
+### Cold starts and the client timeout
+
+Render's free tier stops the backend container after 15 minutes without traffic, and the next
+request has to wait out a full cold boot — container start, JVM start, Spring context, Flyway —
+which routinely runs past 50 seconds.
+
+`frontend/src/api.js` used to abort every request at a flat 15s, so that boot was reported as
+*"Request timed out. Please try again."* Two things were wrong with that. The app looked broken at
+exactly the moment a first-time visitor was deciding whether it worked; and the advice was wrong,
+since a retry inside 15s could not have succeeded either.
+
+The timeout is therefore no longer a constant:
+
+- **When the backend may be asleep**, requests get a 75s budget — enough for a real cold boot to
+  land, so the common case now simply *succeeds*, slowly, instead of failing every time.
+- **Once the backend has answered**, later requests drop back to 15s. A warm server taking 15s is a
+  genuine fault, and spending a minute before saying so would help nobody.
+- **If even the long budget runs out**, the error names the cause — *"Waking up the server — this
+  can take up to a minute on the free tier. Please try again shortly."* — rather than blaming the
+  app for something that is expected, temporary, and about to fix itself.
+
+"May be asleep" is keyed on how long it has been since the server last answered, not on a
+first-request flag: a tab left open over a long lunch faces the same cold boot as a freshly loaded
+one, and a flag would only have covered the second case. Any HTTP response counts as proof the
+container is up, including a 4xx or 5xx — it is reachability being tracked, not success.
 
 ### The one non-obvious piece: the frontend proxies the API
 

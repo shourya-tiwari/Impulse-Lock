@@ -21,6 +21,52 @@ export function registerSessionHandlers(handlers) {
   sessionHandlers = { ...sessionHandlers, ...handlers };
 }
 
+// --- Cold-start handling -----------------------------------------------------------------
+//
+// The deployed backend runs on Render's free tier, which stops the container after 15 minutes
+// without traffic (see DEPLOYMENT.md). The next request then has to wait out a full cold boot -
+// container start, JVM start, Spring context, Flyway - which routinely runs past 50 seconds.
+//
+// Against a flat 15s timeout that meant every first visit after a quiet spell ended in
+// "Request timed out. Please try again." The app looked broken at precisely the moment a new
+// visitor was deciding whether it worked, the advice was wrong (retrying within 15s could not
+// succeed either), and nothing on screen hinted that waiting was the answer.
+//
+// So the timeout is not a constant. When the backend might be asleep we allow a cold boot's worth
+// of time; once it has answered we go back to a tight one, because a warm server taking 15s means
+// something is genuinely wrong and spending a minute to say so would help nobody.
+const WARM_TIMEOUT_MS = 15000;
+const COLD_START_TIMEOUT_MS = 75000;
+
+// Render's idle window is 15 minutes. Sitting slightly under it means that at the boundary we err
+// towards the patient timeout rather than the impatient one - the cost of being wrong in that
+// direction is a slower error message, in the other it is a spurious failure.
+const ASSUME_COLD_AFTER_IDLE_MS = 14 * 60 * 1000;
+
+// When the server last proved it was awake. Null until it first does, which is why the opening
+// request of a session always gets the cold-start budget.
+let lastServerContactAt = null;
+
+// Deliberately keyed on elapsed idle time rather than a one-shot "first request" flag: a session
+// left open over a long lunch faces exactly the same cold boot as a freshly loaded tab, and a flag
+// would have covered only the second case.
+function serverMayBeAsleep() {
+  if (lastServerContactAt === null) return true;
+  return Date.now() - lastServerContactAt > ASSUME_COLD_AFTER_IDLE_MS;
+}
+
+// Any HTTP response proves the container is up, including a 4xx/5xx - it is reachability being
+// tracked here, not success.
+function noteServerContact() {
+  lastServerContactAt = Date.now();
+}
+
+// Test seam: lets a test start from a known warmth state instead of inheriting whatever an earlier
+// test in the same module instance left behind.
+export function resetColdStartTracking() {
+  lastServerContactAt = null;
+}
+
 function isProbablyCorsOrNetworkError(err) {
   const msg = String(err?.message || '').toLowerCase();
   return (
@@ -71,12 +117,19 @@ export async function apiFetch(path, options = {}) {
     body,
     query,
     responseType = 'json',
-    timeoutMs = 15000,
+    timeoutMs,
     skipAuthRetry = false,
   } = options;
 
+  // Captured once up front so the catch block below reports on the situation this request actually
+  // ran under - by the time it aborts, a request that raced ahead of it may already have flipped
+  // the shared warmth state.
+  const assumeCold = serverMayBeAsleep();
+  const effectiveTimeoutMs =
+    timeoutMs !== undefined ? timeoutMs : assumeCold ? COLD_START_TIMEOUT_MS : WARM_TIMEOUT_MS;
+
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), effectiveTimeoutMs);
 
   try {
     let url = buildUrl(path);
@@ -105,6 +158,8 @@ export async function apiFetch(path, options = {}) {
       signal: controller.signal,
     });
 
+    noteServerContact();
+
     if (res.status === 401 && !skipAuthRetry && !isAuthEndpoint(path)) {
       const refreshed = await refreshSession();
       if (refreshed) {
@@ -123,7 +178,17 @@ export async function apiFetch(path, options = {}) {
     return await res.json().catch(() => null);
   } catch (err) {
     if (err?.name === 'AbortError') {
-      throw new Error('Request timed out. Please try again.');
+      // Same underlying event, two very different things to tell the user about it. Cold start is
+      // expected free-tier behaviour with a known remedy (wait, then retry); a timeout against a
+      // server we were talking to moments ago is a real fault, and saying "it's just waking up"
+      // there would be a comforting lie that sends the user off retrying forever.
+      const err2 = new Error(
+        assumeCold
+          ? 'Waking up the server - this can take up to a minute on the free tier. Please try again shortly.'
+          : 'Request timed out. Please try again.'
+      );
+      err2.isColdStart = assumeCold;
+      throw err2;
     }
     if (isProbablyCorsOrNetworkError(err)) {
       throw new Error(
