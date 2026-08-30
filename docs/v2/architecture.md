@@ -4,7 +4,7 @@ This document defines the target architecture for V2. It assumes the reader know
 
 ## Goals driving the architecture
 
-JWT authentication, Spring Security, role-based authorization, Spring Data JPA, an improved (normalized) database, structured logging, audit logging, request validation, comprehensive global exception handling, OpenAPI/Swagger docs, Docker packaging, GitHub Actions CI/CD, an improved dashboard, advanced transaction history, and comprehensive automated testing.
+JWT authentication, Spring Security, role-based authorization, Spring Data JPA, an improved (normalized) database, structured logging, audit logging, request validation, comprehensive global exception handling, OpenAPI/Swagger docs, Docker packaging, GitHub Actions CI, an improved dashboard, advanced transaction history, and comprehensive automated testing.
 
 V2 also uses the migration as an opportunity to fix the behavioral gaps documented in [v1/design-decisions.md](../v1/design-decisions.md): the rule engine becomes DB-configurable instead of hardcoded, `HighAmountRule` becomes a true rolling-daily-total check, `FrequentTransactionRule` becomes a real velocity check backed by transaction history, risk scores are capped at 100, and `restricted_categories` becomes a proper normalized relationship instead of a comma-separated string with an undocumented required column.
 

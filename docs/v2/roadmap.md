@@ -72,7 +72,7 @@ Full design in [deployment-plan.md](./deployment-plan.md).
 
 - Multi-stage `Dockerfile`s for backend and frontend; `docker-compose.yml` wiring backend + frontend + MySQL with healthchecks.
 - CI workflow (backend tests incl. Testcontainers, frontend tests + build) gating every PR.
-- CD workflow building/pushing tagged images on `main`/release tags; a placeholder `deploy` job filled in once a hosting target is chosen.
+- ~~CD workflow building/pushing tagged images on `main`/release tags; a placeholder `deploy` job filled in once a hosting target is chosen.~~ Built, then removed once the hosting target turned out to build its own images — GitHub Actions is now CI only. See [deployment-plan.md § No CD workflow](./deployment-plan.md).
 - `.env.example`, secrets moved out of committed config (closing [v1/design-decisions.md](../v1/design-decisions.md) item 12).
 
 **Exit criteria**: `docker compose up` runs the full stack from a clean checkout with only a `.env` filled in; CI is green and required on `main`; images are published on merge.

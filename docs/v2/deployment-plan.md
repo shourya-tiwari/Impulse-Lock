@@ -52,21 +52,17 @@ job: lint (optional, can be folded into the above jobs)
 ```
 `backend` and `frontend` jobs run in parallel (independent). Testcontainers-based tests work on GitHub-hosted `ubuntu-latest` runners out of the box (Docker is preinstalled). The workflow fails the PR check if either job fails — this is the actual "quality gate," not a suggestion.
 
-### CD workflow (`.github/workflows/cd.yml`) — on push/tag to `main` (or a release tag), after CI passes
-```
-job: build-and-push-images
-  - checkout
-  - docker/login-action against the chosen registry (GHCR is the natural default — no extra
-    account needed beyond the GitHub repo itself)
-  - docker build + push for both backend and frontend images, tagged with the git SHA and
-    (on a release tag) the semantic version
-job: deploy (disabled)
-  - stays `if: false`. Render and Vercel each deploy from their own Git integration, so
-    this job would duplicate them rather than add anything - see "Where this actually
-    runs" below.
-```
+### No CD workflow — deliberately
 
-Separating CI (always runs, gates merges) from CD (only runs on `main`/tags, actually ships something) keeps every PR fast and keeps deployment an explicit, reviewable event rather than something that happens on every commit to a feature branch.
+This plan originally called for a second `.github/workflows/cd.yml` that would push both images to GHCR on `main` and carry a `deploy` job stub. It was built, and has since been removed. Recording why, because "we shipped a CD workflow" reads as more mature than the arrangement that actually serves this project:
+
+- **Nothing consumed the images.** Once Render + Vercel were chosen (see "Where this actually runs"), Render built the repo-root `Dockerfile` itself from the Git integration and Vercel built the CRA bundle itself. The GHCR images were published on every push to `main` and pulled by no environment — pure build minutes and package storage.
+- **The `deploy` job was a permanent `if: false` stub.** Written before a hosting target existed, never filled in once one did. Every Actions run therefore displayed a *Skipped* deploy step for a deploy that had, in fact, already happened seconds earlier via the platforms' push webhooks. That is worse than no deploy step at all: it advertises a gate that does not exist.
+- **The claimed CI→CD ordering was never real.** `cd.yml`'s trigger was a plain `on: push: branches: [main]` — no `workflow_run`, no `needs`. It started in parallel with CI on the same commit. "After CI passes" was a comment in the header, not a mechanism.
+
+So the arrangement is now: **one workflow, `ci.yml`, which is a pure quality gate and deploys nothing**, and deployment is the platforms' own Git integration. One path that plainly does what it says beats two that only appear to be connected.
+
+**The trade this leaves open, stated plainly:** deploys are not gated on tests. Render and Vercel fire on the push to `main`, not on CI's result, so a commit that lands on `main` ships whether CI goes green or red. CI gates the *merge* (a red run blocks the PR), which on a branch-and-PR workflow is most of the value, but it is not the same guarantee. Closing the gap would mean disabling platform auto-deploy and calling their deploy hooks from a job that `needs` the CI jobs — at the cost of owning deploy credentials in Actions secrets and losing the platforms' zero-config rollback UI. Worth doing if this project ever takes real traffic; not worth it for a portfolio deployment on free tiers.
 
 ## Where this actually runs
 
@@ -168,13 +164,13 @@ Render assigns the URL only after the first successful deploy, so the placeholde
 Steps 2 and 4 are a genuine chicken-and-egg: each platform needs the other's URL, so the first
 deploy of each is expected to be non-functional end-to-end until both are filled in.
 
-### CD workflow
+### GitHub Actions' role
 
-`.github/workflows/cd.yml` builds and pushes both images to GHCR on every push to `main`; its
-`deploy` job stays disabled (`if: false`). Render and Vercel each deploy from their own Git
-integration, so a third deploy path in Actions would duplicate them rather than add anything. The
-SHA-tagged GHCR images remain useful for the rollback story below and for running the compose
-stack anywhere else.
+There is exactly one workflow, `.github/workflows/ci.yml`, and it deploys nothing — it runs the
+backend and frontend test suites and uploads the coverage report. Render and Vercel each deploy
+from their own Git integration on push to `main`; that is the entire deploy mechanism. See
+"No CD workflow — deliberately" above for why the GHCR image-publishing workflow that used to sit
+alongside it was removed rather than kept.
 
 ## Database migrations in deployment
 
@@ -247,4 +243,4 @@ the username and password already work.
 
 ## Rollback
 
-Since images are tagged by git SHA (see CD workflow above), a rollback is "redeploy the previous known-good tag" — no separate rollback tooling needed. Flyway migrations are additive/forward-only by convention (no down-migrations authored), so a rollback that would require reversing a schema change is treated as a new forward migration, not a database rollback — standard practice for this style of migration tool.
+Rollback is the hosting platforms' own: Render → **Events** → *Rollback* to a previous deploy; Vercel → **Deployments** → *Promote to Production* on an older one. Both keep previous builds addressable, so no rollback tooling of this project's own is needed (this is one of the things given up by not publishing SHA-tagged images from Actions, and it turns out the platforms already covered it). Flyway migrations are additive/forward-only by convention (no down-migrations authored), so a rollback that would require reversing a schema change is treated as a new forward migration, not a database rollback — standard practice for this style of migration tool.

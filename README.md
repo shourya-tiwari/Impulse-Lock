@@ -1,7 +1,6 @@
 # ImpulseLock
 
 [![CI](https://github.com/shourya-tiwari/Impulse-Lock/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shourya-tiwari/Impulse-Lock/actions/workflows/ci.yml)
-[![CD](https://github.com/shourya-tiwari/Impulse-Lock/actions/workflows/cd.yml/badge.svg?branch=main)](https://github.com/shourya-tiwari/Impulse-Lock/actions/workflows/cd.yml)
 ![Java](https://img.shields.io/badge/Java-17-b07219)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-6DB33F?logo=springboot&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
@@ -54,7 +53,7 @@ document in that folder, cross-referenced throughout.
 - [Database schema](#database-schema)
 - [Security model](#security-model)
 - [Testing](#testing)
-- [CI/CD](#cicd)
+- [CI](#ci)
 - [Deployment](#deployment)
 - [Project structure](#project-structure)
 - [Known limitations](#known-limitations)
@@ -86,8 +85,7 @@ document in that folder, cross-referenced throughout.
   risk-score trend over time, and a "which rules fire most often" view, plus paginated/filterable
   transaction history with CSV export.
 - **Production-shaped packaging** — multi-stage Docker builds for both services, a three-container
-  Compose stack with real healthchecks, and separate CI (test-gate every PR) and CD (build/push
-  images to GHCR) GitHub Actions pipelines.
+  Compose stack with real healthchecks, and a GitHub Actions CI pipeline that test-gates every PR.
 
 ## Tech stack
 
@@ -106,7 +104,7 @@ document in that folder, cross-referenced throughout.
 | Build tools | Maven (backend), npm (frontend) |
 | Testing | JUnit 5, Mockito, AssertJ, Testcontainers (backend); React Testing Library, MSW (frontend); JaCoCo coverage reporting |
 | Containerization | Docker (multi-stage builds), Docker Compose, Nginx (frontend static serving + API reverse proxy) |
-| CI/CD | GitHub Actions (separate CI and CD workflows), GitHub Container Registry (GHCR) |
+| CI | GitHub Actions (one CI workflow — quality gate only; deployment is the hosting platforms' own Git integration) |
 
 ## Architecture
 
@@ -479,24 +477,37 @@ rendering, and 401-triggered silent token refresh.
 
 Full test-tier breakdown: [`docs/v2/testing-strategy.md`](docs/v2/testing-strategy.md).
 
-## CI/CD
+## CI
 
-Two independent GitHub Actions workflows:
+One GitHub Actions workflow, and it is a quality gate only — it deploys nothing.
 
-- **`ci.yml`** — runs on every push/PR to `main`. `backend` job: sets up JDK 17, runs
-  `./mvnw -B verify` (unit + Testcontainers-backed repository/integration tests), uploads the
-  JaCoCo report. `frontend` job: sets up Node 20, runs `npm ci`, `npm test`, and `npm run build`.
-  The two jobs run in parallel; either failing blocks the merge.
-- **`cd.yml`** — runs on push to `main` and on version tags. Builds and pushes both the backend and
-  frontend Docker images to **GitHub Container Registry (GHCR)**, tagged by commit SHA and (on a
-  release tag) semantic version. Its `deploy` job stays disabled (`if: false`) — Render and Vercel
-  each deploy from their own Git integration, so a third path here would duplicate them.
+**`ci.yml`** runs on every push/PR to `main`. The `backend` job sets up JDK 17, runs
+`./mvnw -B verify` (unit + Testcontainers-backed repository/integration tests) and uploads the
+JaCoCo report. The `frontend` job sets up Node 20 and runs `npm ci`, `npm test`, and `npm run build`.
+The two jobs run in parallel; either failing blocks the merge.
+
+Deployment is entirely Render's and Vercel's own Git integration (see
+[Deployment](#deployment)) — no workflow here pushes anything anywhere.
+
+There was previously a second `cd.yml` workflow that published backend and frontend images to GHCR
+and carried a permanently-skipped `deploy` job (`if: false`). It was removed rather than kept:
+nothing consumed the images — Render builds the repo-root `Dockerfile` itself and Vercel builds the
+CRA bundle itself — and the skipped stub showed up in every Actions run as a deploy step that never
+ran, for a deploy that had in fact already happened via the platforms' push webhooks. One honest
+path beats two that only look connected.
+
+**What this does and does not gate.** A red CI run blocks the *merge*. It does not block the
+*deploy*: Render and Vercel react to the push to `main`, not to this workflow's result, so a commit
+that lands on `main` deploys whether CI ends up green or red. Actually gating deploys would mean
+turning off platform auto-deploy and calling their deploy hooks from a job that `needs` these two —
+a deliberate trade this project has not made, in exchange for keeping the deploy path a
+zero-configuration one.
 
 ```bash
-docker compose up --build     # exactly what CD packages, runnable locally
+docker compose up --build     # the same images the Dockerfiles produce, runnable locally
 ```
 
-Full CI/CD and hosting rationale: [`docs/v2/deployment-plan.md`](docs/v2/deployment-plan.md).
+Full CI and hosting rationale: [`docs/v2/deployment-plan.md`](docs/v2/deployment-plan.md).
 
 ## Deployment
 
@@ -509,9 +520,9 @@ chosen for the part of the stack it fits, all on free tiers:
 | Backend | **Render** | The repo-root `Dockerfile` — the same multi-stage image Compose builds locally |
 | Database | **Aiven for MySQL** | Managed MySQL 8, TLS-only, schema created by Flyway on first boot |
 
-Both platforms deploy straight from `main` on push, which is why `cd.yml`'s `deploy` job stays
-disabled — it would only duplicate them. The GHCR images it publishes remain the artifact for
-running this stack anywhere else.
+Both platforms deploy straight from `main` on push — that is the whole deploy mechanism, and the
+only one. GitHub Actions runs tests and stops there. To run this stack anywhere else, build the
+images from the committed `Dockerfile`s (`docker compose up --build`).
 
 ### The one non-obvious piece: the frontend proxies the API
 
@@ -582,7 +593,7 @@ Impulse-Lock/
 │   ├── v1/                                        Original design documentation
 │   └── v2/                                        Architecture, security, database, API,
 │                                                   testing, and deployment design docs
-├── .github/workflows/                             ci.yml, cd.yml
+├── .github/workflows/                             ci.yml (quality gate — no deploy job)
 ├── Dockerfile                                      Maven build stage → JRE-Alpine runtime stage
 ├── docker-compose.yml
 ├── .env.example

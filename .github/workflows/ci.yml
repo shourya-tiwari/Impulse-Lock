@@ -1,5 +1,19 @@
 name: CI
 
+# The only workflow in this repo, and a pure quality gate: it builds, tests and reports, and
+# deliberately deploys nothing.
+#
+# Deployment is Render's and Vercel's own Git integration, both wired to auto-deploy on push to
+# `main` (see DEPLOYMENT.md). There used to be a second `cd.yml` alongside this one that pushed
+# images to GHCR and carried an `if: false` `deploy` stub; it was removed because nothing consumed
+# those images (Render builds the repo-root Dockerfile itself, Vercel builds the CRA bundle itself)
+# and the permanently-skipped stub advertised a gate that did not exist.
+#
+# Worth being honest about what this therefore is and is not: it is the gate on *merging* - a red
+# run blocks the PR - but it is not a gate on *deploying*, because the platforms react to the push
+# rather than to this workflow's result. Gating deploys would mean turning off platform
+# auto-deploy and calling their deploy hooks from a job that `needs` these two.
+
 on:
   push:
     branches: [main]
