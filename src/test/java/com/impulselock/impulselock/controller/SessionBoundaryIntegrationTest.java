@@ -9,14 +9,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.impulselock.impulselock.support.AbstractIntegrationTest;
+import com.impulselock.impulselock.support.CommittedDataCleaner;
 import jakarta.servlet.http.Cookie;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -39,8 +42,16 @@ import org.springframework.test.web.servlet.MvcResult;
  *
  * <p><b>So this class is deliberately NOT {@code @Transactional}</b> - that omission is the entire
  * point of it, not an oversight. Each test drives the real request lifecycle, where every response
- * is serialized after the service transaction has closed. Usernames are randomized per run since
- * there is no rollback to clean up after them.
+ * is serialized after the service transaction has closed.
+ *
+ * <p><b>The cost of that, and why {@link #cleanUpCommittedRows()} exists.</b> No rollback means
+ * every user these tests register is committed for real into the container database that
+ * {@link AbstractIntegrationTest} shares across the whole JVM run. Randomized usernames stop the
+ * rows from colliding with each other, but they do not stop the rows from existing: they were
+ * still sitting there when the next class ran, which is what made
+ * {@code AdminControllerIntegrationTest.adminCanListAndUpdateUserStatus} see 6 users rather than
+ * its own 2 and turned that assertion into a coin flip on class execution order. Committing is
+ * inherent to what this class tests, so it cleans up after itself instead.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -51,6 +62,20 @@ class SessionBoundaryIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    /**
+     * Undoes by hand what {@code @Transactional} would have rolled back, so this class leaves the
+     * shared database exactly as it found it and the classes that run after it see a deterministic
+     * row count. Runs after each test rather than after the class so a failure part-way through
+     * still cannot strand rows.
+     */
+    @AfterEach
+    void cleanUpCommittedRows() {
+        CommittedDataCleaner.clean(jdbcTemplate);
+    }
 
     /**
      * Login re-loads the user from the database, unlike registration which still has the instance it
