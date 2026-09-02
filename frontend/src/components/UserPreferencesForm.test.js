@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitForElementToBeRemoved } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { rest } from 'msw';
 import { server } from '../mocks/server';
@@ -32,7 +32,9 @@ test('adding and removing a restricted category calls the granular endpoints', a
   expect(await screen.findByText('gaming')).toBeInTheDocument();
 
   await user.click(screen.getByRole('button', { name: /Remove luxury/i }));
-  expect(screen.queryByText('luxury')).not.toBeInTheDocument();
+  // The tag is only dropped once the DELETE resolves, so wait for the removal
+  // rather than asserting synchronously against a still-pending request.
+  await waitForElementToBeRemoved(() => screen.queryByText('luxury'));
 });
 
 test('a profile load failure is shown', async () => {
